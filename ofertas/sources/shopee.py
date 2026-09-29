@@ -54,6 +54,20 @@ _CAMPOS = ("itemId productName priceMin priceMax priceDiscountRate imageUrl "
            "offerLink productLink sales ratingStar shopName")
 
 
+def _float(v) -> float | None:
+    try:
+        return float(v) or None
+    except (TypeError, ValueError):
+        return None
+
+
+def _int(v) -> int | None:
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
+
+
 def _node_para_oferta(n: dict) -> Oferta:
     preco = float(n.get("priceMin") or 0) or None
     desconto = int(n.get("priceDiscountRate") or 0) or None
@@ -81,6 +95,8 @@ def _node_para_oferta(n: dict) -> Oferta:
         desconto_pct=desconto,
         imagem=n.get("imageUrl"),
         extra=" · ".join(partes) or None,
+        nota=_float(n.get("ratingStar")),
+        vendas=_int(n.get("sales")),
     )
 
 

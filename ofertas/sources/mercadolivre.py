@@ -19,7 +19,7 @@ from bs4 import BeautifulSoup
 
 from ..config import DATA_DIR, config
 from ..models import Oferta
-from ..utils import USER_AGENT, parse_preco_br, sessao
+from ..utils import USER_AGENT, parse_nota, parse_preco_br, parse_vendas, sessao
 
 log = logging.getLogger("ofertas.ml")
 
@@ -105,8 +105,10 @@ def _parse_card(card) -> Oferta | None:
         imagem = None  # placeholder de lazy-load
 
     partes = []
+    nota = vendas = None
     review = card.select_one(".poly-component__review-compacted")
     if review:
+        nota, vendas = parse_nota(review.get_text(" ", strip=True)), parse_vendas(review.get_text(" ", strip=True))
         partes.append("⭐ " + re.sub(r"\s*\|\s*", " · ", review.get_text(" ", strip=True)))
     if "Frete grátis" in card.get_text():
         partes.append("🚚 Frete grátis")
@@ -125,6 +127,8 @@ def _parse_card(card) -> Oferta | None:
         desconto_pct=desconto,
         imagem=imagem,
         extra=" · ".join(partes) or None,
+        nota=nota,
+        vendas=vendas,
     )
 
 

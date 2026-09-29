@@ -203,5 +203,36 @@ class CicloMultiCanal(unittest.TestCase):
         self.assertTrue(all("meli.la" not in t for _, t in env))
 
 
+class Qualidade(unittest.TestCase):
+    def test_parse_vendas_e_nota(self):
+        from ofertas.utils import parse_nota, parse_vendas
+        self.assertEqual(parse_vendas("4.8 · +5mil vendidos"), 5000)
+        self.assertEqual(parse_vendas("+10mil vendidos"), 10000)
+        self.assertEqual(parse_vendas("+500 vendidos"), 500)
+        self.assertEqual(parse_vendas("1,2 mil vendidos"), 1200)
+        self.assertIsNone(parse_vendas("4.8"))
+        self.assertEqual(parse_nota("4,7 (120)"), 4.7)
+        self.assertIsNone(parse_nota("sem nota"))
+
+    def test_filtros_de_qualidade(self):
+        def of(i, nota=4.8, vendas=500, preco=50, original=100):
+            o = oferta(id_=i, preco=preco, original=original)
+            o.nota, o.vendas = nota, vendas
+            return o
+        ofs = [of("bom"), of("nota-baixa", nota=3.9), of("poucas-vendas", vendas=5),
+               of("desconto-irreal", preco=5, original=100), of("sem-dados", nota=None, vendas=None)]
+        with mock.patch.object(config, "desconto_minimo", 25),              mock.patch.object(config, "desconto_maximo", 85),              mock.patch.object(config, "nota_minima", 4.3),              mock.patch.object(config, "vendas_minimas", 30),              mock.patch.object(pipeline.db, "ja_postada", return_value=False):
+            ids = [o.id_produto for o in pipeline.filtrar(ofs)]
+        self.assertEqual(ids, ["bom", "sem-dados"])  # dado desconhecido não reprova
+
+    def test_termos_automotivo_achados_nos_dados_reais(self):
+        from ofertas.nichos import relevante
+        for t in ["Alto Falante Jbl Triaxial 6trfx55 Flex4 110w", "Capa Chuva Motoqueiro Pvc Impermeável Motoboy",
+                  "Bebê Conforto Para Bebê Comfort de 0 à 13kgs", "Escapamento F1 Mini Tri Fortuna Titan/fan/start"]:
+            self.assertTrue(relevante(t, ["automotivo"]), t)
+        for t in ["Aspirador De Pó Vertical e Sem Fio Redroad W15", "Kit 4 Rádios Comunicadores Walkie Talkie"]:
+            self.assertFalse(relevante(t, ["automotivo"]), t)
+
+
 if __name__ == "__main__":
     unittest.main()

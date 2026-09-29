@@ -67,6 +67,13 @@ def filtrar(ofertas: list[Oferta], canal: Canal | None = None) -> list[Oferta]:
             continue
         if desconto_min and (o.desconto or 0) < desconto_min:
             continue
+        if config.desconto_maximo and (o.desconto or 0) > config.desconto_maximo:
+            continue  # desconto irreal: quase sempre preço "de" inflado
+        # nota/vendas desconhecidas (a fonte não informa) não reprovam; só as conhecidas e baixas
+        if config.nota_minima and o.nota is not None and o.nota < config.nota_minima:
+            continue
+        if config.vendas_minimas and o.vendas is not None and o.vendas < config.vendas_minimas:
+            continue
         if o.preco is not None:
             if config.preco_minimo and o.preco < config.preco_minimo:
                 continue

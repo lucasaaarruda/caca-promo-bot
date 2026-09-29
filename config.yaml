@@ -9,6 +9,9 @@ geral:
 
 filtros:
   desconto_minimo: 25          # % mínimo de desconto para postar (ofertas automáticas)
+  desconto_maximo: 85          # acima disso o desconto é suspeito (preço "de" inflado) e o produto é ignorado; 0 = sem limite
+  nota_minima: 4.3             # só posta produto com avaliação >= isto (quando a loja informa a nota); 0 = ignora
+  vendas_minimas: 30           # só posta produto com >= N vendas (quando a loja informa); 0 = ignora
   preco_minimo: 0              # 0 = sem limite
   preco_maximo: 0              # 0 = sem limite
   palavras_bloqueadas: []      # ex: [capinha, película] — ignora ofertas com essas palavras

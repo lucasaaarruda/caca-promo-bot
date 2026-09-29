@@ -50,6 +50,9 @@ class Config:
         self.horario_ativo: str = str(geral.get("horario_ativo") or "").strip()  # "08:00-23:00"; vazio = 24h
 
         self.desconto_minimo: int = int(filtros.get("desconto_minimo", 0))
+        self.desconto_maximo: int = int(filtros.get("desconto_maximo", 0))  # acima disso = suspeito; 0 = sem limite
+        self.nota_minima: float = float(filtros.get("nota_minima", 0))
+        self.vendas_minimas: int = int(filtros.get("vendas_minimas", 0))
         self.preco_minimo: float = float(filtros.get("preco_minimo", 0))
         self.preco_maximo: float = float(filtros.get("preco_maximo", 0))
         self.palavras_bloqueadas: list[str] = [

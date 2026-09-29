@@ -16,7 +16,7 @@ from bs4 import BeautifulSoup
 
 from ..config import DATA_DIR, config
 from ..models import Oferta
-from ..utils import parse_preco_br, sessao
+from ..utils import parse_nota, parse_preco_br, sessao
 
 log = logging.getLogger("ofertas.amazon")
 
@@ -193,11 +193,13 @@ def _card_para_oferta(card) -> Oferta | None:
         preco_original = None  # sem preço atual, ou "riscado" que não é desconto de verdade
 
     partes = []
+    nota = None
     el = card.select_one("span.a-icon-alt")
     if el:
         m = re.match(r"([\d,]+)", el.get_text(strip=True))
         if m:
             partes.append(f"⭐ {m.group(1)}")
+            nota = parse_nota(m.group(1))
     texto = card.get_text(" ", strip=True)
     if card.select_one("i.a-icon-prime"):
         partes.append("Prime")
@@ -220,6 +222,7 @@ def _card_para_oferta(card) -> Oferta | None:
         preco_original=preco_original,
         imagem=_imagem_grande(img.get("src")) if img else None,
         extra=" · ".join(partes) or None,
+        nota=nota,
     )
 
 
