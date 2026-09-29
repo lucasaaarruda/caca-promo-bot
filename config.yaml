@@ -6,6 +6,8 @@ geral:
   espacamento_segundos: 120    # pausa entre um post e outro no mesmo ciclo
   nao_repetir_dias: 7          # não repostar o mesmo produto dentro desse prazo
   horario_ativo: "08:00-23:00" # só posta nesse intervalo (hora do PC); "" = 24h
+  aviso_amazon: "Como participante do Programa de Associados da Amazon, sou remunerado pelas compras qualificadas efetuadas."
+                               # frase exigida pelo contrato da Amazon; vai no fim dos posts da Amazon. "" = desliga
   relatorio_hora: "21:00"      # hora em que o bot manda o relatório do dia no seu privado; "" = desliga
 
 filtros:

@@ -1,5 +1,6 @@
 from html import escape
 
+from .config import config
 from .models import Oferta
 
 _PLATAFORMA = {
@@ -89,4 +90,6 @@ def montar_caption(o: Oferta) -> str:
         linhas += [""] + detalhes
 
     linhas += ["", _PLATAFORMA.get(o.plataforma, o.plataforma)]
+    if o.plataforma == "amazon" and config.aviso_amazon:  # frase exigida pelo contrato da Amazon
+        linhas.append(f"<i>{escape(config.aviso_amazon)}</i>")
     return "\n".join(linhas)

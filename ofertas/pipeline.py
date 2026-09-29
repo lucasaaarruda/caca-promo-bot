@@ -15,6 +15,7 @@ from .sources import amazon, mercadolivre, shopee
 from .telegram_poster import postar_oferta
 
 log = logging.getLogger("ofertas.pipeline")
+DIAS_SIMILAR = 2  # não repete a mesma "família" de produto no canal por este tempo
 
 
 def coletar() -> list[Oferta]:
@@ -65,12 +66,15 @@ def filtrar(ofertas: list[Oferta], canal: Canal | None = None) -> list[Oferta]:
     palavras = canal.palavras if canal else []
     excluir = canal.excluir if canal else []
     desconto_min = canal.desconto_minimo if canal and canal.desconto_minimo is not None else config.desconto_minimo
+    recentes = {_chave_similar(t) for t in db.titulos_recentes(canal_id, DIAS_SIMILAR)}
     aprovadas = []
     for o in ofertas:
         if not o.titulo:
             continue
-        if not relevante(o.titulo, nichos, palavras, excluir):
+        if not relevante(o.titulo, nichos, palavras, excluir, o.categoria):
             continue
+        if _chave_similar(o.titulo) in recentes:
+            continue  # variação (cor/tamanho) de algo que este canal já postou há pouco
         if db.ja_postada(f"{canal_id}|{o.uid}", config.nao_repetir_dias):
             continue
         if desconto_min and (o.desconto or 0) < desconto_min:
@@ -155,6 +159,7 @@ async def executar_ciclo(bot: Bot) -> int:
         return 0
 
     brutas = await asyncio.to_thread(coletar)
+    await asyncio.to_thread(db.registrar_precos, brutas)
     global _ciclos_vazios
     _ciclos_vazios = 0 if brutas else _ciclos_vazios + 1
     if _ciclos_vazios >= 3:

@@ -15,6 +15,7 @@ class Oferta:
     extra: str | None = None   # avaliação, frete grátis, "no Pix" etc.
     nota: float | None = None  # avaliação média (0-5), quando a fonte informa
     vendas: int | None = None  # unidades vendidas, quando a fonte informa
+    categoria: str | None = None  # categoria de origem no ML (id), quando a fonte informa
 
     @property
     def uid(self) -> str:

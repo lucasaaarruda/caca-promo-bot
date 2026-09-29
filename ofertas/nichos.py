@@ -87,50 +87,60 @@ NICHOS: dict[str, dict] = {
     },
     "automotivo": {
         "emoji": "🚗", "nome": "Automotivo",
-        "ml": {"MLB5672": "Acessórios para Veículos"},
+        # subcategorias do ML (árvore pública): cada uma tem a sua página de ofertas
+        "ml": {"MLB188063": "Limpeza Automotiva", "MLB3381": "Som Automotivo", "MLB2227": "Ferramentas para Veículos",
+               "MLB22693": "Peças de Carros", "MLB1747": "Acessórios de Carros", "MLB1771": "Acessórios de Motos",
+               "MLB243551": "Peças de Motos", "MLB456111": "Lubrificantes e Fluidos", "MLB2239": "Segurança Veicular",
+               "MLB2238": "Pneus e Acessórios"},
+        "ml_confiavel": True,  # a categoria já prova que é do nicho: só as exclusões valem
         "amazon_dep": {"automotive": "Automotivo"},
         "shopee": ["acessório carro", "suporte veicular", "capacete"],
-        # relevância: o título precisa conter um destes termos (palavra inteira, sem acento)...
-        "termos": ["carro", "carros", "automotivo", "automotiva", "veicular", "veiculo", "veiculos",
+        # relevância (Amazon/Shopee): o título precisa conter um destes termos (palavra inteira, sem acento)...
+        "termos": ["carro", "carros", "automotivo", "automotiva", "automotivos", "veicular", "veiculo", "veiculos",
                    "moto", "motos", "motocicleta", "capacete", "pneu", "pneus", "calibrador",
                    "compressor de ar", "auxiliar de partida", "carregador de bateria", "bateria automotiva",
                    "rastreador", "reboque", "guincho", "carplay", "android auto", "multimidia",
                    "central multimidia", "som automotivo", "volante", "tapete automotivo", "farol",
-                   "limpador de para-brisa", "para-brisa", "parabrisa", "retrovisor", "oleo", "lubrificante",
-                   "aditivo", "wd-40", "graxa", "cera", "polidor", "polimento", "vitrificador", "cristalizador",
-                   "detailing", "snow foam", "shampoo automotivo", "lavagem", "lavadora", "lava jato",
-                   "alta pressao", "pano de microfibra", "microfibra", "aspirador automotivo",
-                   "aspirador de po portatil", "vonixx", "cadeira para auto", "cinta", "macaco hidraulico",
-                   "chave de roda", "chave de impacto", "jogo de chaves", "ferramentas", "kit de ferramentas",
-                   "caixa de ferramentas", "parafusadeira", "furadeira", "chave de fenda", "alicate",
-                   "estepe", "triangulo", "extintor", "palheta", "sensor de re", "camera de re",
-                   "dashcam", "camera veicular", "suporte celular carro", "suporte veicular",
+                   "limpador de para-brisa", "para-brisa", "parabrisa", "retrovisor", "oleo de motor",
+                   "lubrificante", "aditivo", "wd-40", "graxa", "cera automotiva", "cera liquida", "carnauba",
+                   "polidor", "polimento", "vitrificador", "cristalizador", "detailing", "snow foam",
+                   "shampoo automotivo", "lavagem", "lavadora de alta pressao", "lava jato", "alta pressao",
+                   "pano de microfibra", "aspirador automotivo", "aspirador de po portatil", "vonixx",
+                   "cadeira para auto", "macaco hidraulico", "chave de roda", "chave de impacto",
+                   "jogo de chaves", "ferramentas", "kit de ferramentas", "caixa de ferramentas",
+                   "parafusadeira", "furadeira", "estepe", "triangulo", "extintor", "palheta", "sensor de re",
+                   "camera de re", "dashcam", "camera veicular", "suporte celular carro", "suporte veicular",
                    "motoqueiro", "motoboy", "motociclista", "bebe conforto", "cadeirinha", "escapamento",
-                   "alto falante", "falante", "triaxial", "subwoofer", "tweeter", "amplificador",
-                   "amortecedor", "pastilha de freio", "disco de freio", "filtro de oleo", "filtro de ar",
-                   "correia dentada", "silenciador", "carenagem", "lanterna traseira", "lampada led",
-                   "kit xenon", "insulfilm", "alarme", "trava eletrica", "sensor de estacionamento",
-                   "buzina", "cabo de bateria", "bomba de ar", "pneu", "aro de roda", "calota"],
-        # ...e não pode conter nenhum destes (a página de "Automotivo" da Amazon vem misturada)
+                   "triaxial", "subwoofer automotivo", "amortecedor", "pastilha de freio", "disco de freio",
+                   "filtro de oleo", "filtro de ar", "correia dentada", "silenciador", "carenagem",
+                   "lanterna traseira", "lampada led", "kit xenon", "insulfilm", "alarme automotivo",
+                   "alarme de carro", "trava eletrica", "sensor de estacionamento", "cabo de bateria",
+                   "bomba de ar", "aro de roda", "calota", "fluido", "radiador"],
+        # ...e não pode conter nenhum destes (palavras que enganam: cueca "microfibra", celular "Moto G"...)
         "excluir": ["biblia", "livro", "livros", "colorir", "brinquedo", "brinquedos", "boneca", "pelucia",
-                    "mobile", "hot wheels", "devocional", "romance", "cafe com deus"],
+                    "mobile", "hot wheels", "devocional", "romance", "cafe com deus", "motorola", "moto g",
+                    "celular", "smartphone", "cueca", "cuecas", "badminton"],
     },
     "country": {
         "emoji": "🤠", "nome": "Country (masculino e feminino)",
-        "ml": {"MLB1430": "Calçados, Roupas e Bolsas"},
+        # categorias do ML onde ficam botas, bonés/chapéus, cintos, calças, camisas, jaquetas e camisetas
+        "ml": {"MLB272202": "Botas", "MLB430275": "Bonés, Chapéus e Boinas", "MLB190393": "Cintos",
+               "MLB188065": "Calças", "MLB107292": "Camisas", "MLB108803": "Casacos e Jaquetas",
+               "MLB31447": "Camisetas e Regatas"},
         "amazon_dep": {"fashion": "Moda"},
         "amazon_buscas": ["jaqueta country", "camisa country", "bota country", "boné country",
                           "calça country", "chapéu country", "cinto country"],
         "shopee": ["jaqueta country", "camisa country", "bota country", "boné country",
                    "calça country", "chapéu country", "cinto country"],
+        # estrito de propósito: "bota", "chapéu" e "fivela" sozinhos trazem bota de trabalho e chapéu de praia
         "termos": ["country", "western", "texana", "texano", "vaqueiro", "vaqueira", "peao", "rodeio",
-                   "boiadeiro", "sertanejo", "bota", "botas", "botina", "botinas", "chapeu", "cinto texano",
-                   "fivela", "camisa xadrez", "colete country"],
-        "excluir": ["infantil", "capa de celular", "brinquedo"],
+                   "boiadeiro", "sertanejo", "cowboy", "cowgirl", "bico fino", "bico quadrado"],
+        "excluir": ["infantil", "capa de celular", "capa para celular", "brinquedo"],
     },
     "perfumes": {
         "emoji": "🧴", "nome": "Perfumes",
-        "ml": {"MLB1246": "Beleza e Cuidado Pessoal"},
+        "ml": {"MLB6284": "Perfumes"},
+        "ml_confiavel": True,
         "amazon_dep": {"beauty": "Beleza"},
         "amazon_buscas": ["perfume masculino", "perfume feminino", "eau de parfum", "body splash"],
         "shopee": ["perfume masculino", "perfume feminino", "body splash", "eau de parfum"],
@@ -179,9 +189,15 @@ def _casa(termo: str, titulo_norm: str) -> bool:
     return re.search(rf"(?<![a-z0-9]){re.escape(_norm(termo).strip())}(?:s|es)?(?![a-z0-9])", titulo_norm) is not None
 
 
-def relevante(titulo: str, chaves: list[str], palavras=(), excluir=()) -> bool:
+def categorias_confiaveis(chaves: list[str]) -> set[str]:
+    """Categorias do ML que, por si só, provam que a oferta é do nicho (só as exclusões continuam valendo)."""
+    return {cid for c in chaves if NICHOS.get(c, {}).get("ml_confiavel") for cid in NICHOS[c].get("ml", {})}
+
+
+def relevante(titulo: str, chaves: list[str], palavras=(), excluir=(), categoria: str | None = None) -> bool:
     """O título faz sentido para o canal? `chaves` são nichos do catálogo; `palavras`/`excluir`
-    são termos próprios do canal. Sem nicho e sem palavras (ou nicho sem termos) = aceita."""
+    são termos próprios do canal; `categoria` é a categoria do ML de onde a oferta veio.
+    Sem nicho e sem palavras (ou nicho sem termos) = aceita."""
     if not chaves and not palavras:
         return True
     t = _norm(titulo)
@@ -189,6 +205,8 @@ def relevante(titulo: str, chaves: list[str], palavras=(), excluir=()) -> bool:
     barrar = [x for n in escolhidos for x in n.get("excluir", [])] + list(excluir)
     if any(_casa(x, t) for x in barrar):
         return False
+    if categoria and categoria in categorias_confiaveis(chaves):
+        return True
     termos = [x for n in escolhidos for x in n.get("termos", [])] + list(palavras)
     if not termos or any(not n.get("termos") for n in escolhidos):
         return True

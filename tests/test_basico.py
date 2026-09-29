@@ -355,5 +355,59 @@ class Relatorio(unittest.TestCase):
             self.assertEqual(db.total_postadas("automotivo"), 2)
 
 
+class AuditoriaCorrecoes(unittest.TestCase):
+    def test_falsos_positivos_achados_no_ensaio(self):
+        from ofertas.nichos import relevante
+        for t in ["Kit 6 Cuecas Lupo Boxer Box Sem Costura Basic Microfibra", "Smartphone Motorola Moto G54 128GB",
+                  "Lavadora de Roupas 12kg Turbo", "Cera Depilatória Roll-on 100ml", "Óleo Capilar de Argan 60ml",
+                  "Cinta Modeladora Feminina Pós Parto"]:
+            self.assertFalse(relevante(t, ["automotivo"]), t)
+        for t in ["Lavadora de Alta Pressão Karcher 1800 PSI", "Cera Automotiva Líquida Carnaúba 500ml",
+                  "Óleo de Motor 5W30 Sintético 1L", "Pano de Microfibra Automotivo Kit 6", "Módulo Amplificador Som Automotivo"]:
+            self.assertTrue(relevante(t, ["automotivo"]), t)
+
+    def test_categoria_confiavel_dispensa_termos_mas_nao_as_exclusoes(self):
+        from ofertas.nichos import relevante
+        self.assertTrue(relevante("Carburador Fusca 1500 Kuerl Original", ["automotivo"], categoria="MLB22693"))
+        self.assertFalse(relevante("Carburador Fusca 1500 Kuerl Original", ["automotivo"], categoria="MLB1430"))
+        self.assertFalse(relevante("Smartphone Motorola Moto G54", ["automotivo"], categoria="MLB22693"))
+        self.assertTrue(relevante("Lattafa Fakhar Platin 100ml", ["perfumes"], categoria="MLB6284"))
+
+    def test_country_estrito(self):
+        from ofertas.nichos import relevante
+        self.assertTrue(relevante("Boné Country Trucker Masculino", ["country"]))
+        self.assertTrue(relevante("Calça Country Feminina Rodeio Bordada", ["country"]))
+        self.assertFalse(relevante("Chapéu Praia Dobrável Feminino Aba Larga", ["country"]))
+        self.assertFalse(relevante("Bota Caterpillar Adventure Leve", ["country"]))
+
+    def test_nao_reposta_variacao_do_mesmo_produto_entre_rodadas(self):
+        from ofertas import db
+        from ofertas.canais import Canal
+        canal = Canal(id="auto", nome="A", chat_id="-1", nichos=[])
+        with mock.patch.object(db, "_DB", pathlib.Path(tempfile.mkdtemp()) / "s.db"),              mock.patch.object(config, "desconto_minimo", 0):
+            db.registrar(oferta(id_="cor-azul", titulo="Cute Comfy Coloring Book Adults Bold Easy Azul"), "auto")
+            variacao = oferta(id_="cor-rosa", titulo="Cute Comfy Coloring Book Adults Bold Easy Rosa")
+            outro = oferta(id_="outro", titulo="Shampoo Automotivo Vonixx Concentrado")
+            ids = [o.id_produto for o in pipeline.filtrar([variacao, outro], canal)]
+        self.assertEqual(ids, ["outro"])
+
+    def test_declaracao_da_amazon_so_nos_posts_da_amazon(self):
+        from ofertas.formatter import montar_caption
+        frase = "Como participante do Programa de Associados da Amazon, sou remunerado pelas compras qualificadas efetuadas."
+        with mock.patch.object(config, "aviso_amazon", frase):
+            self.assertIn(frase, montar_caption(oferta(plat="amazon")))
+            self.assertNotIn(frase, montar_caption(oferta(plat="mercadolivre")))
+        with mock.patch.object(config, "aviso_amazon", ""):
+            self.assertNotIn("Programa de Associados", montar_caption(oferta(plat="amazon")))
+
+    def test_historico_de_precos(self):
+        from ofertas import db
+        with mock.patch.object(db, "_DB", pathlib.Path(tempfile.mkdtemp()) / "p.db"):
+            o = oferta(id_="p1", preco=100.0)
+            db.registrar_precos([o]); db.registrar_precos([o])           # mesma leitura em <3h: 1 linha só
+            db.registrar_precos([oferta(id_="p1", preco=90.0)])          # preço mudou: nova linha
+            self.assertEqual([p for _, p in db.historico_preco(o.uid)], [100.0, 90.0])
+
+
 if __name__ == "__main__":
     unittest.main()

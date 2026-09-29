@@ -64,6 +64,7 @@ def buscar_ofertas() -> list[Oferta]:
             r.raise_for_status()
             achadas = _parse_pagina(r.text)
             for o in achadas:
+                o.categoria = cat_id or None
                 ofertas.setdefault(o.id_produto, o)
             log.info("Mercado Livre %s: %d ofertas", nome, len(achadas))
             time.sleep(1)

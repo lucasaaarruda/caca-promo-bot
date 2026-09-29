@@ -25,6 +25,8 @@ def _conn() -> sqlite3.Connection:
         c.execute("ALTER TABLE postadas ADD COLUMN desconto INTEGER")  # bancos criados antes do relatório
     c.execute("CREATE TABLE IF NOT EXISTS ciclos (ts TEXT, coletadas INTEGER, postadas INTEGER, detalhe TEXT)")
     c.execute("CREATE TABLE IF NOT EXISTS eventos (ts TEXT, tipo TEXT, detalhe TEXT)")
+    c.execute("CREATE TABLE IF NOT EXISTS precos (uid TEXT, ts TEXT, preco REAL)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_precos_uid ON precos (uid)")
     _aplicar_migracao(c)
     return c
 
@@ -74,6 +76,37 @@ def total_postadas(canal_id: str | None = None) -> int:
         if canal_id:
             return c.execute("SELECT COUNT(*) FROM postadas WHERE uid LIKE ?", (canal_id + "|%",)).fetchone()[0]
         return c.execute("SELECT COUNT(*) FROM postadas").fetchone()[0]
+
+
+def titulos_recentes(canal_id: str, dias: int) -> list[str]:
+    """Títulos já postados no canal nos últimos `dias` (para não repetir variações do mesmo produto)."""
+    desde = (dt.datetime.now() - dt.timedelta(days=dias)).isoformat(timespec="seconds")
+    with closing(_conn()) as c:
+        return [r[0] for r in c.execute(
+            "SELECT titulo FROM postadas WHERE uid LIKE ? AND postada_em >= ?", (canal_id + "|%", desde))]
+
+
+# ── Histórico de preços (base para "menor preço que já vimos") ───────
+
+def registrar_precos(ofertas: list[Oferta], reter_dias: int = 90) -> None:
+    """Guarda o preço visto de cada oferta coletada. Só grava se mudou ou se a última leitura tem >3h."""
+    agora = dt.datetime.now()
+    limite = (agora - dt.timedelta(hours=3)).isoformat(timespec="seconds")
+    with closing(_conn()) as c, c:
+        for o in ofertas:
+            if not o.preco:
+                continue
+            ult = c.execute("SELECT ts, preco FROM precos WHERE uid = ? ORDER BY ts DESC LIMIT 1", (o.uid,)).fetchone()
+            if ult and ult[0] > limite and ult[1] == o.preco:
+                continue
+            c.execute("INSERT INTO precos VALUES (?, ?, ?)", (o.uid, agora.isoformat(timespec="seconds"), o.preco))
+        c.execute("DELETE FROM precos WHERE ts < ?", ((agora - dt.timedelta(days=reter_dias)).isoformat(timespec="seconds"),))
+
+
+def historico_preco(uid: str, dias: int = 60) -> list[tuple[str, float]]:
+    desde = (dt.datetime.now() - dt.timedelta(days=dias)).isoformat(timespec="seconds")
+    with closing(_conn()) as c:
+        return c.execute("SELECT ts, preco FROM precos WHERE uid = ? AND ts >= ? ORDER BY ts", (uid, desde)).fetchall()
 
 
 # ── Histórico para o relatório ───────────────────────────────────────
