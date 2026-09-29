@@ -2,7 +2,7 @@ import datetime as dt
 import sqlite3
 from contextlib import closing
 
-from .config import DATA_DIR
+from .caminhos import DATA_DIR
 from .models import Oferta
 
 _DB = DATA_DIR / "ofertas.db"

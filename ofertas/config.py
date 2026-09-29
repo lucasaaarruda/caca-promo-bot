@@ -6,9 +6,8 @@ from pathlib import Path
 import yaml
 from dotenv import load_dotenv
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = Path(os.getenv("OFERTAS_DATA_DIR") or BASE_DIR / "data")  # override: testes e ensaios
-DATA_DIR.mkdir(exist_ok=True)
+from .caminhos import BASE_DIR, DATA_DIR  # noqa: F401 — reexportados para os outros módulos
+
 
 # Navegador do Playwright fica dentro do projeto: instalações no AppData podem
 # não ser visíveis entre sessões diferentes (sandbox). Instale com:

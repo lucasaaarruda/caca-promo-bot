@@ -9,7 +9,7 @@ import re
 import unicodedata
 from dataclasses import asdict, dataclass, field
 
-from .config import DATA_DIR
+from .caminhos import DATA_DIR
 
 ARQ = DATA_DIR / "canais.json"
 

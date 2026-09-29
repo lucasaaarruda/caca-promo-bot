@@ -9,6 +9,7 @@ Roda um servidor só em 127.0.0.1 e abre no navegador. Dali dá para:
 Sobe com:  uv run python -m ofertas painel   (ou dê 2 cliques em PAINEL.bat)
 """
 import json
+from dataclasses import asdict
 import secrets
 import subprocess
 import sys
@@ -20,6 +21,7 @@ from urllib.parse import urlparse
 
 import requests
 
+from . import canais
 from .config import BASE_DIR, DATA_DIR
 from .painel_html import PAGINA
 
@@ -175,9 +177,28 @@ def status() -> dict:
         "preenchidos": {k: bool(env.get(k)) for k in CHAVES},
         "navegador": tem_navegador,
         "sessao_ml": tem_sessao_ml,
-        "pronto": bool(env.get("TELEGRAM_BOT_TOKEN") and env.get("TELEGRAM_CHAT_ID")
-                       and env.get("TELEGRAM_OWNER_ID")),
+        "pronto": bool(env.get("TELEGRAM_BOT_TOKEN") and env.get("TELEGRAM_OWNER_ID")
+                       and canais.ativos()),
     }
+
+
+def testar_canal(chat_id: str, nome: str) -> dict:
+    """Manda uma mensagem de teste ao canal: confirma que o bot é admin e que o ID está certo."""
+    token = ler_env().get("TELEGRAM_BOT_TOKEN", "")
+    if not token:
+        return {"erro": "Preencha e salve o token do bot primeiro."}
+    if not chat_id:
+        return {"erro": "Canal sem ID."}
+    try:
+        r = requests.post(f"https://api.telegram.org/bot{token}/sendMessage", timeout=20,
+                          json={"chat_id": chat_id, "text": f"✅ Teste: o bot está conectado ao canal {nome}."})
+        dados = r.json()
+    except Exception as e:
+        return {"erro": f"Não consegui falar com o Telegram: {e}"}
+    if dados.get("ok"):
+        return {"ok": True}
+    return {"erro": f"Telegram recusou: {dados.get('description', '?')} "
+                    "(o bot precisa ser administrador do canal, com permissão de publicar)"}
 
 
 # ── Servidor HTTP ─────────────────────────────────────────────────────
@@ -242,6 +263,10 @@ class Handler(BaseHTTPRequestHandler):
             fonte = urlparse(self.path).query
             alvo = acao if "acao" in fonte else bot
             self._json({"linhas": list(alvo.linhas)})
+        elif rota == "/api/canais":
+            from . import canais
+            from .nichos import catalogo
+            self._json({"canais": [asdict(c) for c in canais.ler()], "catalogo": catalogo()})
         elif rota == "/api/nichos":
             from .nichos import catalogo, ler_selecao
             self._json({"catalogo": catalogo(), "selecionados": ler_selecao()})
@@ -258,7 +283,9 @@ class Handler(BaseHTTPRequestHandler):
             atuais = ler_env()
             filtrados = {}
             for chave, _, _, segredo, _ in CAMPOS:
-                v = dados.get(chave, "")
+                if chave not in dados:  # campo que o formulário não envia (ex.: TELEGRAM_CHAT_ID legado)
+                    continue
+                v = dados[chave]
                 if segredo and not v and atuais.get(chave):
                     continue
                 filtrados[chave] = v
@@ -289,6 +316,15 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"ok": True})
         elif rota == "/api/detectar-ids":
             self._json(detectar_ids())
+        elif rota == "/api/canais":
+            from . import canais
+            try:
+                canais.salvar(dados.get("canais") or [])
+            except (ValueError, TypeError) as e:
+                return self._json({"erro": str(e)}, 400)
+            self._json({"ok": True})
+        elif rota == "/api/canal-teste":
+            self._json(testar_canal(str(dados.get("chat_id", "")).strip(), str(dados.get("nome", ""))))
         elif rota == "/api/nichos":
             from .nichos import salvar_selecao
             salvar_selecao(dados.get("selecionados") or [])

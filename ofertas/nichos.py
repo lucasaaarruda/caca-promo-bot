@@ -12,7 +12,7 @@ import json
 import re
 import unicodedata
 
-from .config import DATA_DIR
+from .caminhos import DATA_DIR
 
 ARQ_SELECAO = DATA_DIR / "nichos.json"
 

@@ -1,4 +1,5 @@
 import os
+import pathlib
 import tempfile
 
 # Os testes NUNCA tocam nos dados reais: apontam para uma pasta temporária antes de importar o bot.
@@ -144,6 +145,62 @@ class Migracao(unittest.TestCase):
                   "print(len(config.canais), db.total_postadas('automotivo'))")
         r = subprocess.run([sys.executable, "-c", codigo], env=env, capture_output=True, text=True)
         self.assertEqual(r.stdout.strip(), "1 1", r.stderr[-400:])
+
+
+class FakeBot:
+    def __init__(self):
+        self.enviados = []  # (chat_id, texto)
+
+    async def send_message(self, chat_id, texto, **kw):
+        self.enviados.append((chat_id, texto))
+
+    async def send_photo(self, chat_id, foto, caption="", **kw):
+        self.enviados.append((chat_id, caption))
+
+
+class CicloMultiCanal(unittest.TestCase):
+    def _rodar(self, ml_falha=False):
+        import asyncio
+        from ofertas.canais import Canal
+        canais = [Canal(id="auto", nome="Auto", chat_id="-1", nichos=["automotivo"]),
+                  Canal(id="perf", nome="Perf", chat_id="-2", nichos=["perfumes"]),
+                  Canal(id="country", nome="Country", chat_id="-3", nichos=["country"])]
+        brutas = [
+            Oferta("amazon", "a1", "Kit Lavagem Automotiva Shampoo Cera", "https://x/a1", preco=50, preco_original=100),
+            Oferta("mercadolivre", "m1", "Central Multimídia 7 polegadas carro", "", url_produto="https://ml/m1", preco=50, preco_original=100),
+            Oferta("amazon", "a2", "Perfume Masculino Eau de Parfum 100ml", "https://x/a2", preco=50, preco_original=100),
+            Oferta("mercadolivre", "m2", "Perfume Árabe Feminino 100ml", "", url_produto="https://ml/m2", preco=50, preco_original=100),
+            Oferta("amazon", "a3", "Bota Country Texana Masculina", "https://x/a3", preco=50, preco_original=100),
+            Oferta("amazon", "a4", "Bíblia Sagrada Letra Grande", "https://x/a4", preco=20, preco_original=100),
+        ]
+
+        def gerar(ofs):
+            if ml_falha:
+                raise RuntimeError("Sessão do ML expirou")
+            for o in ofs:
+                o.url_afiliado = "https://meli.la/" + o.id_produto
+
+        bot = FakeBot()
+        with mock.patch.object(config, "canais", canais),              mock.patch.object(config, "horario_ativo", ""),              mock.patch.object(config, "desconto_minimo", 25),              mock.patch.object(config, "max_posts_por_ciclo", 3),              mock.patch.object(config, "espacamento_segundos", 0),              mock.patch.object(pipeline, "coletar", return_value=brutas),              mock.patch.object(pipeline.mercadolivre, "gerar_links_afiliado", side_effect=gerar),              mock.patch.object(pipeline.asyncio, "sleep", new=mock.AsyncMock()),              mock.patch.object(pipeline, "avisar_dono", new=mock.AsyncMock()):
+            n = asyncio.run(pipeline.executar_ciclo(bot))
+        return n, bot.enviados
+
+    def test_cada_oferta_vai_para_o_canal_certo(self):
+        n, env = self._rodar()
+        por_canal = {}
+        for chat, txt in env:
+            por_canal.setdefault(chat, []).append(txt)
+        self.assertEqual(n, 5)
+        self.assertEqual(len(por_canal["-1"]), 2)   # lavagem + multimídia
+        self.assertEqual(len(por_canal["-2"]), 2)   # 2 perfumes
+        self.assertEqual(len(por_canal["-3"]), 1)   # bota country
+        self.assertFalse(any("Bíblia" in t for _, t in env))
+        self.assertEqual([c for c, _ in env[:3]], ["-1", "-2", "-3"])  # intercalado
+
+    def test_ml_fora_do_ar_nao_desperdica_vagas(self):
+        n, env = self._rodar(ml_falha=True)
+        self.assertEqual(n, 3)  # sobra só o que veio da Amazon: 1 por canal
+        self.assertTrue(all("meli.la" not in t for _, t in env))
 
 
 if __name__ == "__main__":
