@@ -109,6 +109,29 @@ NICHOS: dict[str, dict] = {
         "excluir": ["biblia", "livro", "livros", "colorir", "brinquedo", "brinquedos", "boneca", "pelucia",
                     "mobile", "hot wheels", "devocional", "romance", "cafe com deus"],
     },
+    "country": {
+        "emoji": "🤠", "nome": "Country (masculino e feminino)",
+        "ml": {"MLB1430": "Calçados, Roupas e Bolsas"},
+        "amazon_dep": {"fashion": "Moda"},
+        "amazon_buscas": ["jaqueta country", "camisa country", "bota country", "boné country",
+                          "calça country", "chapéu country", "cinto country"],
+        "shopee": ["jaqueta country", "camisa country", "bota country", "boné country",
+                   "calça country", "chapéu country", "cinto country"],
+        "termos": ["country", "western", "texana", "texano", "vaqueiro", "vaqueira", "peao", "rodeio",
+                   "boiadeiro", "sertanejo", "bota", "botas", "botina", "botinas", "chapeu", "cinto texano",
+                   "fivela", "camisa xadrez", "colete country"],
+        "excluir": ["infantil", "capa de celular", "brinquedo"],
+    },
+    "perfumes": {
+        "emoji": "🧴", "nome": "Perfumes",
+        "ml": {"MLB1246": "Beleza e Cuidado Pessoal"},
+        "amazon_dep": {"beauty": "Beleza"},
+        "amazon_buscas": ["perfume masculino", "perfume feminino", "eau de parfum", "body splash"],
+        "shopee": ["perfume masculino", "perfume feminino", "body splash", "eau de parfum"],
+        "termos": ["perfume", "perfumes", "colonia", "deo colonia", "eau de parfum", "eau de toilette",
+                   "parfum", "body splash", "fragrancia", "edp", "edt", "kit perfume"],
+        "excluir": ["porta perfume", "amostra", "atomizador vazio", "sabonete", "hidratante corporal"],
+    },
     "livros": {
         "emoji": "📚", "nome": "Livros",
         "ml": {"MLB1196": "Livros, Revistas e Comics"},
@@ -150,17 +173,20 @@ def _casa(termo: str, titulo_norm: str) -> bool:
     return re.search(rf"(?<![a-z0-9]){re.escape(_norm(termo).strip())}(?:s|es)?(?![a-z0-9])", titulo_norm) is not None
 
 
-def relevante(titulo: str, chaves: list[str]) -> bool:
-    """O título faz sentido para os nichos escolhidos? Sem nicho (ou nicho sem termos) = aceita."""
-    if not chaves:
+def relevante(titulo: str, chaves: list[str], palavras=(), excluir=()) -> bool:
+    """O título faz sentido para o canal? `chaves` são nichos do catálogo; `palavras`/`excluir`
+    são termos próprios do canal. Sem nicho e sem palavras (ou nicho sem termos) = aceita."""
+    if not chaves and not palavras:
         return True
     t = _norm(titulo)
     escolhidos = [NICHOS[c] for c in chaves if c in NICHOS]
-    if any(_casa(x, t) for n in escolhidos for x in n.get("excluir", [])):
+    barrar = [x for n in escolhidos for x in n.get("excluir", [])] + list(excluir)
+    if any(_casa(x, t) for x in barrar):
         return False
-    if any(not n.get("termos") for n in escolhidos):
+    termos = [x for n in escolhidos for x in n.get("termos", [])] + list(palavras)
+    if not termos or any(not n.get("termos") for n in escolhidos):
         return True
-    return any(_casa(x, t) for n in escolhidos for x in n["termos"])
+    return any(_casa(x, t) for x in termos)
 
 
 def expandir(chaves: list[str]) -> dict:

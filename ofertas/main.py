@@ -16,8 +16,8 @@ def cmd_check(_):
     print("── Checagem da configuração ──")
     if config.bot_token:
         print("✅ Token do bot")
-    if config.chat_id:
-        print(f"✅ Canal/grupo: {config.chat_id}")
+    for c in config.canais:
+        print(f"✅ Canal {c.rotulo}: {c.chat_id}")
     if config.owner_id:
         print(f"✅ Owner id: {config.owner_id}")
     if config.amazon_tag:
@@ -42,8 +42,8 @@ def cmd_ciclo(_):
     from telegram import Bot
     from . import pipeline
     from .config import config
-    if not (config.bot_token and config.chat_id):
-        raise SystemExit("Configure TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID antes.")
+    if not (config.bot_token and config.canais):
+        raise SystemExit("Configure o token do bot e crie um canal no painel antes.")
 
     async def go():
         bot = Bot(config.bot_token)
@@ -75,15 +75,18 @@ def cmd_postar(args):
     from . import db
     from .config import config
     from .telegram_poster import postar_oferta
-    if not (config.bot_token and config.chat_id):
-        raise SystemExit("Configure TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID antes.")
+    if not (config.bot_token and config.canais):
+        raise SystemExit("Configure o token do bot e crie um canal no painel antes.")
+    canal = next((c for c in config.canais if c.id == args.canal), None) if args.canal else config.canais[0]
+    if not canal:
+        raise SystemExit("Canal desconhecido. Disponíveis: " + ", ".join(c.id for c in config.canais))
     o = _converter(args.url)
 
     async def go():
         bot = Bot(config.bot_token)
         async with bot:
-            await postar_oferta(bot, o, config.chat_id)
-        db.registrar(o)
+            await postar_oferta(bot, o, canal.chat_id)
+        db.registrar(o, canal.id)
         print(f"✅ Postada: {o.titulo[:60]}")
 
     asyncio.run(go())
@@ -154,6 +157,7 @@ def main():
 
     pp = sub.add_parser("postar", help="converte um link e posta no canal")
     pp.add_argument("url")
+    pp.add_argument("--canal", help="id do canal (padrão: o primeiro)")
     pp.set_defaults(fn=cmd_postar)
 
     sub.add_parser("instalar-navegador", help="baixa o Chromium usado pelo Linkbuilder (fica em data/)").set_defaults(fn=cmd_instalar_navegador)

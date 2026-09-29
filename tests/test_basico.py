@@ -1,3 +1,10 @@
+import os
+import tempfile
+
+# Os testes NUNCA tocam nos dados reais: apontam para uma pasta temporária antes de importar o bot.
+os.environ["OFERTAS_DATA_DIR"] = tempfile.mkdtemp(prefix="ofertas-teste-")
+os.environ["TELEGRAM_CHAT_ID"] = ""
+
 import unittest
 from datetime import datetime
 from unittest import mock
@@ -45,7 +52,6 @@ class Filtro(unittest.TestCase):
                oferta(id_="c")]
         with mock.patch.object(config, "desconto_minimo", 25), \
              mock.patch.object(config, "palavras_bloqueadas", ["capinha"]), \
-             mock.patch.object(config, "nichos", []), \
              mock.patch.object(config, "preco_minimo", 0), \
              mock.patch.object(config, "preco_maximo", 0), \
              mock.patch.object(pipeline.db, "ja_postada", return_value=False):
@@ -80,6 +86,64 @@ class Relevancia(unittest.TestCase):
     def test_sem_nicho_aceita_tudo(self):
         from ofertas.nichos import relevante
         self.assertTrue(relevante("Qualquer coisa", []))
+
+
+class Canais(unittest.TestCase):
+    def test_validar_ids_unicos_e_obrigatorios(self):
+        from ofertas import canais
+        lista = canais.validar([{"nome": "Perfumes", "chat_id": "-1"}, {"nome": "Perfumes", "chat_id": "-2"}])
+        self.assertEqual([c.id for c in lista], ["perfumes", "perfumes-2"])
+        with self.assertRaises(ValueError):
+            canais.validar([{"nome": "", "chat_id": "-1"}])
+        with self.assertRaises(ValueError):
+            canais.validar([{"nome": "X", "chat_id": ""}])
+
+    def test_palavras_aceitam_texto_com_virgula(self):
+        from ofertas import canais
+        c = canais.validar([{"nome": "Bikes", "chat_id": "-1", "palavras": "bicicleta, capacete ciclista\nbike"}])[0]
+        self.assertEqual(c.palavras, ["bicicleta", "capacete ciclista", "bike"])
+
+    def test_filtro_por_canal(self):
+        from ofertas.canais import Canal
+        perfumes = Canal(id="perfumes", nome="P", chat_id="-1", nichos=["perfumes"])
+        country = Canal(id="country", nome="C", chat_id="-2", nichos=["country"])
+        ofs = [oferta(id_="1", titulo="Perfume Asad Lattafa 100ml Eau de Parfum"),
+               oferta(id_="2", titulo="Bota Country Masculina Couro Texana"),
+               oferta(id_="3", titulo="Central Multimídia Universal")]
+        with mock.patch.object(config, "desconto_minimo", 0), \
+             mock.patch.object(pipeline.db, "ja_postada", return_value=False):
+            self.assertEqual([o.id_produto for o in pipeline.filtrar(ofs, perfumes)], ["1"])
+            self.assertEqual([o.id_produto for o in pipeline.filtrar(ofs, country)], ["2"])
+
+    def test_palavras_proprias_e_excluir(self):
+        from ofertas.nichos import relevante
+        self.assertTrue(relevante("Bicicleta Aro 29 Mountain Bike", [], ["bicicleta"]))
+        self.assertFalse(relevante("Brinquedo bicicleta infantil", [], ["bicicleta"], ["brinquedo"]))
+
+    def test_historico_por_canal(self):
+        from ofertas import db
+        o = oferta(id_="h1")
+        db.registrar(o, "a")
+        self.assertTrue(db.ja_postada("a|" + o.uid, 7))
+        self.assertFalse(db.ja_postada("b|" + o.uid, 7))
+
+
+class Migracao(unittest.TestCase):
+    def test_migra_canal_e_historico_em_processo_novo(self):
+        import json, sqlite3, subprocess, sys
+        pasta = tempfile.mkdtemp(prefix="ofertas-migra-")
+        con = sqlite3.connect(os.path.join(pasta, "ofertas.db"))
+        con.execute("CREATE TABLE postadas (uid TEXT PRIMARY KEY, plataforma TEXT, titulo TEXT, preco REAL, postada_em TEXT)")
+        con.execute("INSERT INTO postadas VALUES ('amazon:X1','amazon','t',1.0,'2026-01-01T00:00:00')")
+        con.commit(); con.close()
+        with open(os.path.join(pasta, "nichos.json"), "w") as f:
+            json.dump(["automotivo"], f)
+        env = {**os.environ, "OFERTAS_DATA_DIR": pasta, "TELEGRAM_CHAT_ID": "-100123"}
+        # importa db ANTES de config, como o bot faz de verdade (já quebrou por import circular)
+        codigo = ("from ofertas import db; from ofertas.config import config; "
+                  "print(len(config.canais), db.total_postadas('automotivo'))")
+        r = subprocess.run([sys.executable, "-c", codigo], env=env, capture_output=True, text=True)
+        self.assertEqual(r.stdout.strip(), "1 1", r.stderr[-400:])
 
 
 if __name__ == "__main__":

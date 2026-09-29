@@ -7,7 +7,7 @@ import yaml
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = BASE_DIR / "data"
+DATA_DIR = Path(os.getenv("OFERTAS_DATA_DIR") or BASE_DIR / "data")  # override: testes e ensaios
 DATA_DIR.mkdir(exist_ok=True)
 
 # Navegador do Playwright fica dentro do projeto: instalações no AppData podem
@@ -62,22 +62,25 @@ class Config:
         self.fonte_shopee: dict = fontes.get("shopee") or {"ativa": False}
         self.fonte_amazon: dict = fontes.get("amazon") or {"ativa": False}
 
-        # Seleção de nichos feita no painel (data/nichos.json). Se houver, ela
-        # SUBSTITUI as categorias/departamentos/buscas do config.yaml.
-        # Nenhum nicho selecionado = mantém o config.yaml (padrão: todas as categorias).
-        self.nichos: list[str] = []
+        # Canais (data/canais.json, editado no painel). As fontes coletam UMA vez a união do que
+        # todos os canais ativos pedem; depois cada canal filtra o que é dele.
+        # Um canal sem nicho nem palavras = "tudo": nesse caso mantém as listas do config.yaml.
+        self.canais = []
         try:
-            from .nichos import expandir, ler_selecao
-            self.nichos = ler_selecao()
-            if self.nichos:
-                exp = expandir(self.nichos)
+            from .canais import ativos
+            from .nichos import expandir
+            self.canais = ativos()
+            if self.canais and not any(c.sem_filtro for c in self.canais):
+                chaves = list(dict.fromkeys(k for c in self.canais for k in c.nichos))
+                palavras = list(dict.fromkeys(p for c in self.canais for p in c.palavras))
+                exp = expandir(chaves)
                 self.fonte_ml = {**self.fonte_ml, "categorias": exp["ml"]}
-                self.fonte_amazon = {**self.fonte_amazon,
-                                     "departamentos": exp["amazon_dep"],
-                                     "buscas": exp["amazon_buscas"]}
-                self.fonte_shopee = {**self.fonte_shopee, "buscas": exp["shopee"]}
+                self.fonte_amazon = {**self.fonte_amazon, "departamentos": exp["amazon_dep"],
+                                     "buscas": list(dict.fromkeys(exp["amazon_buscas"] + palavras))}
+                self.fonte_shopee = {**self.fonte_shopee,
+                                     "buscas": list(dict.fromkeys(exp["shopee"] + palavras))}
         except Exception as e:
-            logging.getLogger("ofertas.config").warning("Não consegui aplicar nichos.json: %s", e)
+            logging.getLogger("ofertas.config").warning("Não consegui aplicar os canais: %s", e)
 
 
 config = Config()
@@ -103,8 +106,8 @@ def verificar() -> list[str]:
     pendencias = []
     if not config.bot_token:
         pendencias.append("TELEGRAM_BOT_TOKEN (crie o bot no @BotFather)")
-    if not config.chat_id:
-        pendencias.append("TELEGRAM_CHAT_ID (canal/grupo onde o bot vai postar)")
+    if not config.canais:
+        pendencias.append("Nenhum canal ativo (crie um no painel, seção Canais)")
     if not config.owner_id:
         pendencias.append("TELEGRAM_OWNER_ID (seu user id — mande /id para o bot)")
     if not config.amazon_tag:

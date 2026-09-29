@@ -6,6 +6,7 @@ import time
 from telegram import Bot
 
 from . import db
+from .canais import Canal
 from .nichos import relevante
 from .config import config, dentro_do_horario
 from .models import Oferta
@@ -49,16 +50,22 @@ def coletar() -> list[Oferta]:
     return todas
 
 
-def filtrar(ofertas: list[Oferta]) -> list[Oferta]:
+def filtrar(ofertas: list[Oferta], canal: Canal | None = None) -> list[Oferta]:
+    """Ofertas que servem para o canal: relevantes ao nicho, não repetidas, com desconto e preço ok."""
+    canal_id = canal.id if canal else "principal"
+    nichos = canal.nichos if canal else []
+    palavras = canal.palavras if canal else []
+    excluir = canal.excluir if canal else []
+    desconto_min = canal.desconto_minimo if canal and canal.desconto_minimo is not None else config.desconto_minimo
     aprovadas = []
     for o in ofertas:
         if not o.titulo:
             continue
-        if not relevante(o.titulo, config.nichos):
+        if not relevante(o.titulo, nichos, palavras, excluir):
             continue
-        if db.ja_postada(o.uid, config.nao_repetir_dias):
+        if db.ja_postada(f"{canal_id}|{o.uid}", config.nao_repetir_dias):
             continue
-        if config.desconto_minimo and (o.desconto or 0) < config.desconto_minimo:
+        if desconto_min and (o.desconto or 0) < desconto_min:
             continue
         if o.preco is not None:
             if config.preco_minimo and o.preco < config.preco_minimo:
@@ -117,40 +124,64 @@ async def avisar_dono(bot: Bot, texto: str, repetir_apos_h: float = 6) -> None:
 
 
 async def executar_ciclo(bot: Bot) -> int:
-    """Um ciclo completo: coletar -> filtrar -> escolher -> gerar links -> postar. Retorna nº de posts."""
+    """Um ciclo completo: coletar (uma vez) -> por canal: filtrar e escolher -> links -> postar."""
     if not dentro_do_horario():
         log.info("Fora do horário ativo (%s) — ciclo pulado", config.horario_ativo)
         return 0
+    canais = config.canais
+    if not canais:
+        log.warning("Nenhum canal ativo — crie um no painel (seção Canais)")
+        return 0
 
     brutas = await asyncio.to_thread(coletar)
-    boas = filtrar(brutas)
-    escolhidas = escolher(boas, config.max_posts_por_ciclo)
+    boas = {c.id: filtrar(brutas, c) for c in canais}
+
+    def _escolher() -> dict[str, list[Oferta]]:
+        return {c.id: escolher(boas[c.id], c.max_posts_por_ciclo or config.max_posts_por_ciclo)
+                for c in canais}
+
+    escolhidas = _escolher()
 
     # Mercado Livre: gerar link de afiliado só das escolhidas (linkbuilder é caro)
-    ml_pendentes = [o for o in escolhidas if o.plataforma == "mercadolivre" and not o.url_afiliado]
+    ml_pendentes = {o.uid: o for lst in escolhidas.values() for o in lst
+                    if o.plataforma == "mercadolivre" and not o.url_afiliado}
     if ml_pendentes:
         try:
-            await asyncio.to_thread(mercadolivre.gerar_links_afiliado, ml_pendentes)
+            await asyncio.to_thread(mercadolivre.gerar_links_afiliado, list(ml_pendentes.values()))
         except Exception as e:
             log.error("Linkbuilder ML falhou: %s", e)
             if "Sessão" in str(e):
                 await avisar_dono(bot, f"⚠️ Mercado Livre parou de gerar links: {e}")
+            # sem link não há post: tira o ML do páreo e escolhe de novo, para não desperdiçar vagas
+            for c in canais:
+                boas[c.id] = [o for o in boas[c.id] if o.plataforma != "mercadolivre" or o.url_afiliado]
+            escolhidas = _escolher()
 
+    # intercala os canais (1º de cada, 2º de cada...) para o feed de todos andar junto
+    fila: list[tuple[Canal, Oferta]] = []
+    for i in range(max((len(v) for v in escolhidas.values()), default=0)):
+        fila += [(c, escolhidas[c.id][i]) for c in canais if i < len(escolhidas[c.id])]
+
+    pausa = max(20, config.espacamento_segundos // max(1, len(canais)))
     postadas = 0
-    for o in escolhidas:
+    for n, (c, o) in enumerate(fila):
         if not o.url_afiliado:
             log.warning("Sem link de afiliado, pulando: %s", o.titulo[:60])
             continue
-        db.registrar(o)  # antes de postar: se o processo cair no meio, não reposta
+        chave = f"{c.id}|{o.uid}"
+        db.registrar(o, c.id)  # antes de postar: se o processo cair no meio, não reposta
         try:
-            await postar_oferta(bot, o, config.chat_id)
+            await postar_oferta(bot, o, c.chat_id)
         except Exception as e:
-            log.error("Falha ao postar '%s': %s", o.titulo[:60], e)
-            db.esquecer(o.uid)
+            log.error("Falha ao postar '%s' em %s: %s", o.titulo[:60], c.nome, e)
+            db.esquecer(chave)
+            await avisar_dono(bot, f"⚠️ Não consegui postar no canal {c.rotulo}: {e}\n"
+                                   "Confira se o bot é administrador do canal e se o ID está certo.")
             continue
         postadas += 1
-        if o is not escolhidas[-1]:
-            await asyncio.sleep(config.espacamento_segundos)
+        if n < len(fila) - 1:
+            await asyncio.sleep(pausa)
 
-    log.info("Ciclo: %d coletadas, %d aprovadas, %d postadas", len(brutas), len(boas), postadas)
+    log.info("Ciclo: %d coletadas | %s | %d postadas", len(brutas),
+             ", ".join(f"{c.nome}: {len(boas[c.id])} boas" for c in canais), postadas)
     return postadas
