@@ -181,7 +181,7 @@ class CicloMultiCanal(unittest.TestCase):
                 o.url_afiliado = "https://meli.la/" + o.id_produto
 
         bot = FakeBot()
-        with mock.patch.object(config, "canais", canais),              mock.patch.object(config, "horario_ativo", ""),              mock.patch.object(config, "desconto_minimo", 25),              mock.patch.object(config, "max_posts_por_ciclo", 3),              mock.patch.object(config, "espacamento_segundos", 0),              mock.patch.object(pipeline, "coletar", return_value=brutas),              mock.patch.object(pipeline.mercadolivre, "gerar_links_afiliado", side_effect=gerar),              mock.patch.object(pipeline.asyncio, "sleep", new=mock.AsyncMock()),              mock.patch.object(pipeline, "avisar_dono", new=mock.AsyncMock()):
+        with mock.patch.object(config, "canais", canais), mock.patch.object(pipeline.db, "_DB", pathlib.Path(tempfile.mkdtemp()) / "t.db"),             mock.patch.object(config, "horario_ativo", ""),              mock.patch.object(config, "desconto_minimo", 25),              mock.patch.object(config, "max_posts_por_ciclo", 3),              mock.patch.object(config, "espacamento_segundos", 0),              mock.patch.object(pipeline, "coletar", return_value=brutas),              mock.patch.object(pipeline.mercadolivre, "gerar_links_afiliado", side_effect=gerar),              mock.patch.object(pipeline.asyncio, "sleep", new=mock.AsyncMock()),              mock.patch.object(pipeline, "avisar_dono", new=mock.AsyncMock()):
             n = asyncio.run(pipeline.executar_ciclo(bot))
         return n, bot.enviados
 

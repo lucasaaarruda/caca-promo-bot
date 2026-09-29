@@ -240,6 +240,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         rota = urlparse(self.path).path
+        if rota == "/favicon.ico":  # o navegador pede sozinho, sem token
+            self.send_response(204)
+            self.end_headers()
+            return
         if not self._autorizado(exige_token=rota != "/"):
             return
         if rota == "/":
