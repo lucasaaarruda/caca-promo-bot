@@ -85,7 +85,7 @@ def _node_para_oferta(n: dict) -> Oferta:
 
 
 def _buscar_keyword(termo: str, limite: int) -> list[Oferta]:
-    query = (f'{{productOfferV2(keyword:"{termo}",sortType:{SORT_TYPE},page:1,limit:{limite})'
+    query = (f'{{productOfferV2(keyword:{json.dumps(termo)},sortType:{SORT_TYPE},page:1,limit:{limite})'
              f"{{nodes{{{_CAMPOS}}}}}}}")
     data = _chamar(query)
     nodes = (data.get("productOfferV2") or {}).get("nodes") or []

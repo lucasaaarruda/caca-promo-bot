@@ -4,6 +4,7 @@ qualquer link colado (ML/Shopee/Amazon) em post com o seu link de afiliado.
 import asyncio
 import logging
 import secrets
+import time
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
@@ -18,7 +19,14 @@ from .utils import extrair_urls
 
 log = logging.getLogger("ofertas.bot")
 
-_pendentes: dict[str, Oferta] = {}
+PREVIA_VALIDADE = 3600  # segundos
+_pendentes: dict[str, tuple[float, Oferta]] = {}
+
+
+def _limpar_pendentes() -> None:
+    agora = time.time()
+    for t in [t for t, (criada, _) in _pendentes.items() if agora - criada > PREVIA_VALIDADE]:
+        del _pendentes[t]
 
 
 async def _cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -96,7 +104,8 @@ async def _receber_link(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await aviso.delete()
 
     token = secrets.token_hex(4)
-    _pendentes[token] = oferta
+    _limpar_pendentes()
+    _pendentes[token] = (time.time(), oferta)
     teclado = InlineKeyboardMarkup([
         [InlineKeyboardButton("🛒 Pegar oferta", url=oferta.url_afiliado)],
         [InlineKeyboardButton("✅ Postar no canal", callback_data=f"post:{token}"),
@@ -127,9 +136,14 @@ async def _receber_forward(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def _callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
+    if not _e_dono(update):
+        await q.answer()
+        return
     await q.answer()
     acao, _, token = q.data.partition(":")
-    oferta = _pendentes.pop(token, None)
+    _limpar_pendentes()
+    item = _pendentes.pop(token, None)
+    oferta = item[1] if item else None
 
     async def _status(texto: str):
         if q.message.photo:

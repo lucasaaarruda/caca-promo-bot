@@ -135,6 +135,9 @@ PAGINA = r"""<!doctype html>
 <div class="toast" id="toast"></div>
 
 <script>
+const __TOKEN="__TOKEN_PAINEL__";
+const __fetch=window.fetch.bind(window);
+window.fetch=(u,o={})=>__fetch(u,{...o,headers:{...(o.headers||{}),"X-Painel-Token":__TOKEN}});
 const $ = s => document.querySelector(s);
 let CFG = {}, statusAtual = {};
 

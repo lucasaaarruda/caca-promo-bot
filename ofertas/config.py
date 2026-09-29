@@ -1,3 +1,4 @@
+import logging
 import os
 from datetime import datetime
 from pathlib import Path
@@ -75,8 +76,8 @@ class Config:
                                      "departamentos": exp["amazon_dep"],
                                      "buscas": exp["amazon_buscas"]}
                 self.fonte_shopee = {**self.fonte_shopee, "buscas": exp["shopee"]}
-        except Exception:
-            pass
+        except Exception as e:
+            logging.getLogger("ofertas.config").warning("Não consegui aplicar nichos.json: %s", e)
 
 
 config = Config()

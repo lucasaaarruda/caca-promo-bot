@@ -9,6 +9,7 @@ Roda um servidor só em 127.0.0.1 e abre no navegador. Dali dá para:
 Sobe com:  uv run python -m ofertas painel   (ou dê 2 cliques em PAINEL.bat)
 """
 import json
+import secrets
 import subprocess
 import sys
 import threading
@@ -24,6 +25,8 @@ from .painel_html import PAGINA
 
 HOST, PORT = "127.0.0.1", 8481  # 8478=split-app, 8479=ClipOS/cortes — evita colisão
 ENV_PATH = BASE_DIR / ".env"
+TOKEN = secrets.token_urlsafe(24)  # só a página servida por este processo conhece; barra CSRF
+HOSTS_OK = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
 
 # (chave, rótulo, grupo, é_segredo, ajuda)
 CAMPOS = [
@@ -200,10 +203,26 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             return {}
 
+    def _autorizado(self, exige_token: bool) -> bool:
+        """Barra DNS rebinding (Host) e requisições de outros sites (Origin/token)."""
+        if self.headers.get("Host", "") not in HOSTS_OK:
+            self._json({"erro": "host inválido"}, 403)
+            return False
+        origem = self.headers.get("Origin")
+        if origem and origem not in {f"http://{h}" for h in HOSTS_OK}:
+            self._json({"erro": "origem inválida"}, 403)
+            return False
+        if exige_token and not secrets.compare_digest(self.headers.get("X-Painel-Token", ""), TOKEN):
+            self._json({"erro": "token inválido"}, 403)
+            return False
+        return True
+
     def do_GET(self):
         rota = urlparse(self.path).path
+        if not self._autorizado(exige_token=rota != "/"):
+            return
         if rota == "/":
-            corpo = PAGINA.encode("utf-8")
+            corpo = PAGINA.replace("__TOKEN_PAINEL__", TOKEN).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(corpo)))
@@ -231,6 +250,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         rota = urlparse(self.path).path
+        if not self._autorizado(exige_token=True):
+            return
         dados = self._corpo_json()
         if rota == "/api/config":
             # não sobrescreve segredo com vazio (campo em branco = manter o atual)

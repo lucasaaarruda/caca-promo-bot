@@ -130,12 +130,13 @@ async def executar_ciclo(bot: Bot) -> int:
         if not o.url_afiliado:
             log.warning("Sem link de afiliado, pulando: %s", o.titulo[:60])
             continue
+        db.registrar(o)  # antes de postar: se o processo cair no meio, não reposta
         try:
             await postar_oferta(bot, o, config.chat_id)
         except Exception as e:
             log.error("Falha ao postar '%s': %s", o.titulo[:60], e)
+            db.esquecer(o.uid)
             continue
-        db.registrar(o)
         postadas += 1
         if o is not escolhidas[-1]:
             await asyncio.sleep(config.espacamento_segundos)

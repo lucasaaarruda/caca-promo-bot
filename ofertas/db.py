@@ -1,5 +1,6 @@
 import datetime as dt
 import sqlite3
+from contextlib import closing
 
 from .config import DATA_DIR
 from .models import Oferta
@@ -21,7 +22,7 @@ def _conn() -> sqlite3.Connection:
 
 
 def ja_postada(uid: str, dentro_de_dias: int) -> bool:
-    with _conn() as c:
+    with closing(_conn()) as c:
         row = c.execute("SELECT postada_em FROM postadas WHERE uid = ?", (uid,)).fetchone()
     if not row:
         return False
@@ -30,7 +31,7 @@ def ja_postada(uid: str, dentro_de_dias: int) -> bool:
 
 
 def registrar(oferta: Oferta) -> None:
-    with _conn() as c:
+    with closing(_conn()) as c, c:
         c.execute(
             "INSERT OR REPLACE INTO postadas (uid, plataforma, titulo, preco, postada_em)"
             " VALUES (?, ?, ?, ?, ?)",
@@ -39,6 +40,11 @@ def registrar(oferta: Oferta) -> None:
         )
 
 
+def esquecer(uid: str) -> None:
+    with closing(_conn()) as c, c:
+        c.execute("DELETE FROM postadas WHERE uid = ?", (uid,))
+
+
 def total_postadas() -> int:
-    with _conn() as c:
+    with closing(_conn()) as c:
         return c.execute("SELECT COUNT(*) FROM postadas").fetchone()[0]
