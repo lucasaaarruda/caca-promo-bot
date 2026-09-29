@@ -1,10 +1,12 @@
 import asyncio
 import logging
 import re
+import time
 
 from telegram import Bot
 
 from . import db
+from .nichos import relevante
 from .config import config, dentro_do_horario
 from .models import Oferta
 from .sources import amazon, mercadolivre, shopee
@@ -52,6 +54,8 @@ def filtrar(ofertas: list[Oferta]) -> list[Oferta]:
     for o in ofertas:
         if not o.titulo:
             continue
+        if not relevante(o.titulo, config.nichos):
+            continue
         if db.ja_postada(o.uid, config.nao_repetir_dias):
             continue
         if config.desconto_minimo and (o.desconto or 0) < config.desconto_minimo:
@@ -95,10 +99,17 @@ def escolher(ofertas: list[Oferta], n: int) -> list[Oferta]:
     return escolhidas
 
 
-async def avisar_dono(bot: Bot, texto: str) -> None:
-    """Manda um aviso no privado do dono (se configurado) — para operação sem supervisão."""
+_ultimo_aviso: dict[str, float] = {}
+
+
+async def avisar_dono(bot: Bot, texto: str, repetir_apos_h: float = 6) -> None:
+    """Manda um aviso no privado do dono (se configurado). O mesmo aviso só se repete após N horas."""
     if not config.owner_id:
         return
+    agora = time.time()
+    if agora - _ultimo_aviso.get(texto, 0) < repetir_apos_h * 3600:
+        return
+    _ultimo_aviso[texto] = agora
     try:
         await bot.send_message(config.owner_id, texto)
     except Exception as e:

@@ -9,6 +9,8 @@ A seleção do usuário fica em data/nichos.json (lista de chaves). Nenhum nicho
 marcado = todas as categorias (comportamento padrão).
 """
 import json
+import re
+import unicodedata
 
 from .config import DATA_DIR
 
@@ -88,6 +90,24 @@ NICHOS: dict[str, dict] = {
         "ml": {"MLB5672": "Acessórios para Veículos"},
         "amazon_dep": {"automotive": "Automotivo"},
         "shopee": ["acessório carro", "suporte veicular", "capacete"],
+        # relevância: o título precisa conter um destes termos (palavra inteira, sem acento)...
+        "termos": ["carro", "carros", "automotivo", "automotiva", "veicular", "veiculo", "veiculos",
+                   "moto", "motos", "motocicleta", "capacete", "pneu", "pneus", "calibrador",
+                   "compressor de ar", "auxiliar de partida", "carregador de bateria", "bateria automotiva",
+                   "rastreador", "reboque", "guincho", "carplay", "android auto", "multimidia",
+                   "central multimidia", "som automotivo", "volante", "tapete automotivo", "farol",
+                   "limpador de para-brisa", "para-brisa", "parabrisa", "retrovisor", "oleo", "lubrificante",
+                   "aditivo", "wd-40", "graxa", "cera", "polidor", "polimento", "vitrificador", "cristalizador",
+                   "detailing", "snow foam", "shampoo automotivo", "lavagem", "lavadora", "lava jato",
+                   "alta pressao", "pano de microfibra", "microfibra", "aspirador automotivo",
+                   "aspirador de po portatil", "vonixx", "cadeira para auto", "cinta", "macaco hidraulico",
+                   "chave de roda", "chave de impacto", "jogo de chaves", "ferramentas", "kit de ferramentas",
+                   "caixa de ferramentas", "parafusadeira", "furadeira", "chave de fenda", "alicate",
+                   "estepe", "triangulo", "extintor", "palheta", "sensor de re", "camera de re",
+                   "dashcam", "camera veicular", "suporte celular carro", "suporte veicular"],
+        # ...e não pode conter nenhum destes (a página de "Automotivo" da Amazon vem misturada)
+        "excluir": ["biblia", "livro", "livros", "colorir", "brinquedo", "brinquedos", "boneca", "pelucia",
+                    "mobile", "hot wheels", "devocional", "romance", "cafe com deus"],
     },
     "livros": {
         "emoji": "📚", "nome": "Livros",
@@ -117,6 +137,30 @@ def ler_selecao() -> list[str]:
 def salvar_selecao(chaves: list[str]) -> None:
     validas = [c for c in chaves if c in NICHOS]
     ARQ_SELECAO.write_text(json.dumps(validas), encoding="utf-8")
+
+
+def _norm(texto: str) -> str:
+    """minúsculas, sem acento, só letras/números/hífen/espaço."""
+    t = unicodedata.normalize("NFKD", texto.lower())
+    t = "".join(c for c in t if not unicodedata.combining(c))
+    return re.sub(r"[^a-z0-9\- ]+", " ", t)
+
+
+def _casa(termo: str, titulo_norm: str) -> bool:
+    return re.search(rf"(?<![a-z0-9]){re.escape(_norm(termo).strip())}(?:s|es)?(?![a-z0-9])", titulo_norm) is not None
+
+
+def relevante(titulo: str, chaves: list[str]) -> bool:
+    """O título faz sentido para os nichos escolhidos? Sem nicho (ou nicho sem termos) = aceita."""
+    if not chaves:
+        return True
+    t = _norm(titulo)
+    escolhidos = [NICHOS[c] for c in chaves if c in NICHOS]
+    if any(_casa(x, t) for n in escolhidos for x in n.get("excluir", [])):
+        return False
+    if any(not n.get("termos") for n in escolhidos):
+        return True
+    return any(_casa(x, t) for n in escolhidos for x in n["termos"])
 
 
 def expandir(chaves: list[str]) -> dict:

@@ -45,6 +45,7 @@ class Filtro(unittest.TestCase):
                oferta(id_="c")]
         with mock.patch.object(config, "desconto_minimo", 25), \
              mock.patch.object(config, "palavras_bloqueadas", ["capinha"]), \
+             mock.patch.object(config, "nichos", []), \
              mock.patch.object(config, "preco_minimo", 0), \
              mock.patch.object(config, "preco_maximo", 0), \
              mock.patch.object(pipeline.db, "ja_postada", return_value=False):
@@ -59,6 +60,26 @@ class Escolha(unittest.TestCase):
         esc = pipeline.escolher(ofs, 2)
         self.assertEqual({o.plataforma for o in esc}, {"amazon", "mercadolivre"})
         self.assertEqual(len(esc), 2)
+
+
+class Relevancia(unittest.TestCase):
+    def test_automotivo(self):
+        from ofertas.nichos import relevante
+        ok = ["Central Multimídia MP5 Tela 7 Polegadas Roadstar", "TNT Pulverizador Snow Foam 2L Manual Detailing",
+              "Kit Lavagem Completa Shampoo Cera Tok Final", "Carregador De Bateria Automotivo Bivolt",
+              "Assento De Carro Infantil Elevação Fit Up", "Fone De Ouvido Para Capacete Bluetooth",
+              "Rastreador GPS Veicular 4G", "Cinta Fita 70 Ton Reboque Guincho 4x4"]
+        fora = ["Bíblia NVT Filament Letra Grande", "Cute & Comfy Coloring Book Livro de Colorir",
+                "Hot Wheels City Pista de Brinquedo Reboque de Dragão", "Móbile Centopeia Espiral com Chocalho",
+                "Meditações de Marco Aurélio", "Esponja Prateada Unitária Bettanin"]
+        for t in ok:
+            self.assertTrue(relevante(t, ["automotivo"]), t)
+        for t in fora:
+            self.assertFalse(relevante(t, ["automotivo"]), t)
+
+    def test_sem_nicho_aceita_tudo(self):
+        from ofertas.nichos import relevante
+        self.assertTrue(relevante("Qualquer coisa", []))
 
 
 if __name__ == "__main__":
