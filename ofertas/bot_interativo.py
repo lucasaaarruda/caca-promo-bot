@@ -10,7 +10,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
                           ContextTypes, MessageHandler, filters)
 
-from . import db, pipeline
+from . import db, pipeline, relatorio
 from .config import config
 from .models import Oferta
 from .sources import detectar_fonte
@@ -36,7 +36,8 @@ async def _cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "com o seu link de afiliado.\n"
         "• /id — mostra o id deste chat (ou do canal, se você encaminhar um post dele)\n"
         "• /ciclo — roda uma busca de ofertas agora\n"
-        "• /status — situação do bot"
+        "• /status — situação do bot\n"
+        "• /relatorio — resumo do dia"
     )
 
 
@@ -61,6 +62,16 @@ async def _cmd_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"máx. {config.max_posts_por_ciclo} posts por ciclo\n"
         f"🎯 Desconto mínimo: {config.desconto_minimo}%"
     )
+
+
+async def _cmd_relatorio(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not _e_dono(update):
+        return
+    await update.message.reply_text(relatorio.relatorio_do_dia())
+
+
+async def _job_relatorio(ctx: ContextTypes.DEFAULT_TYPE):
+    await pipeline.avisar_dono(ctx.bot, relatorio.relatorio_do_dia(), repetir_apos_h=0)
 
 
 def _e_dono(update: Update) -> bool:
@@ -195,6 +206,7 @@ def rodar():
     app.add_handler(CommandHandler("id", _cmd_id))
     app.add_handler(CommandHandler("status", _cmd_status))
     app.add_handler(CommandHandler("ciclo", _cmd_ciclo))
+    app.add_handler(CommandHandler("relatorio", _cmd_relatorio))
     app.add_handler(CallbackQueryHandler(_callback))
     app.add_handler(MessageHandler(filters.FORWARDED & filters.ChatType.PRIVATE, _receber_forward))
     app.add_handler(MessageHandler(
@@ -208,6 +220,16 @@ def rodar():
         log.info("Ciclo automático a cada %d min", config.intervalo_minutos)
     else:
         log.info("Ciclo automático desligado (sem fonte ativa ou sem canal ativo)")
+
+    if config.relatorio_hora and config.owner_id:
+        try:
+            import datetime as dt
+            from tzlocal import get_localzone
+            h, m = (int(x) for x in config.relatorio_hora.split(":"))
+            app.job_queue.run_daily(_job_relatorio, time=dt.time(h, m, tzinfo=get_localzone()))
+            log.info("Relatório diário às %s", config.relatorio_hora)
+        except ValueError:
+            log.warning("relatorio_hora inválida no config.yaml (%r): use HH:MM", config.relatorio_hora)
 
     log.info("Bot rodando — fale com ele no privado do Telegram")
     app.run_polling(allowed_updates=Update.ALL_TYPES)

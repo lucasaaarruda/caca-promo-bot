@@ -150,23 +150,30 @@ class Migracao(unittest.TestCase):
 class FakeBot:
     def __init__(self):
         self.enviados = []  # (chat_id, texto)
+        self.links = []     # (chat_id, url do botão)
+
+    def _anota(self, chat_id, texto, kw):
+        self.enviados.append((chat_id, texto))
+        botoes = kw["reply_markup"].inline_keyboard[0] if kw.get("reply_markup") else []
+        self.links.append((chat_id, botoes[0].url if botoes else None))
 
     async def send_message(self, chat_id, texto, **kw):
-        self.enviados.append((chat_id, texto))
+        self._anota(chat_id, texto, kw)
 
     async def send_photo(self, chat_id, foto, caption="", **kw):
-        self.enviados.append((chat_id, caption))
+        self._anota(chat_id, caption, kw)
 
 
 class CicloMultiCanal(unittest.TestCase):
     def _rodar(self, ml_falha=False):
         import asyncio
         from ofertas.canais import Canal
-        canais = [Canal(id="auto", nome="Auto", chat_id="-1", nichos=["automotivo"]),
+        canais = [Canal(id="auto", nome="Auto", chat_id="-1", nichos=["automotivo"],
+                        ml_etiqueta="etq-auto", amazon_tag="tag-auto-20"),
                   Canal(id="perf", nome="Perf", chat_id="-2", nichos=["perfumes"]),
                   Canal(id="country", nome="Country", chat_id="-3", nichos=["country"])]
         brutas = [
-            Oferta("amazon", "a1", "Kit Lavagem Automotiva Shampoo Cera", "https://x/a1", preco=50, preco_original=100),
+            Oferta("amazon", "a1", "Kit Lavagem Automotiva Shampoo Cera", "https://www.amazon.com.br/dp/a1?tag=geral-20", preco=50, preco_original=100),
             Oferta("mercadolivre", "m1", "Central Multimídia 7 polegadas carro", "", url_produto="https://ml/m1", preco=50, preco_original=100),
             Oferta("amazon", "a2", "Perfume Masculino Eau de Parfum 100ml", "https://x/a2", preco=50, preco_original=100),
             Oferta("mercadolivre", "m2", "Perfume Árabe Feminino 100ml", "", url_produto="https://ml/m2", preco=50, preco_original=100),
@@ -174,15 +181,20 @@ class CicloMultiCanal(unittest.TestCase):
             Oferta("amazon", "a4", "Bíblia Sagrada Letra Grande", "https://x/a4", preco=20, preco_original=100),
         ]
 
-        def gerar(ofs):
+        self.etiquetas_usadas = []
+
+        def gerar(grupos):
             if ml_falha:
                 raise RuntimeError("Sessão do ML expirou")
-            for o in ofs:
-                o.url_afiliado = "https://meli.la/" + o.id_produto
+            for etiqueta, ofs in grupos.items():
+                self.etiquetas_usadas.append(etiqueta)
+                for o in ofs:
+                    o.url_afiliado = f"https://meli.la/{etiqueta}/{o.id_produto}"
 
         bot = FakeBot()
-        with mock.patch.object(config, "canais", canais), mock.patch.object(pipeline.db, "_DB", pathlib.Path(tempfile.mkdtemp()) / "t.db"),             mock.patch.object(config, "horario_ativo", ""),              mock.patch.object(config, "desconto_minimo", 25),              mock.patch.object(config, "max_posts_por_ciclo", 3),              mock.patch.object(config, "espacamento_segundos", 0),              mock.patch.object(pipeline, "coletar", return_value=brutas),              mock.patch.object(pipeline.mercadolivre, "gerar_links_afiliado", side_effect=gerar),              mock.patch.object(pipeline.asyncio, "sleep", new=mock.AsyncMock()),              mock.patch.object(pipeline, "avisar_dono", new=mock.AsyncMock()):
+        with mock.patch.object(config, "canais", canais), mock.patch.object(config, "ml_etiqueta", "padrao"), mock.patch.object(pipeline.db, "_DB", pathlib.Path(tempfile.mkdtemp()) / "t.db"),             mock.patch.object(config, "horario_ativo", ""),              mock.patch.object(config, "desconto_minimo", 25),              mock.patch.object(config, "max_posts_por_ciclo", 3),              mock.patch.object(config, "espacamento_segundos", 0),              mock.patch.object(pipeline, "coletar", return_value=brutas),              mock.patch.object(pipeline.mercadolivre, "gerar_links_por_etiqueta", side_effect=gerar),              mock.patch.object(pipeline.asyncio, "sleep", new=mock.AsyncMock()),              mock.patch.object(pipeline, "avisar_dono", new=mock.AsyncMock()):
             n = asyncio.run(pipeline.executar_ciclo(bot))
+        self.bot = bot
         return n, bot.enviados
 
     def test_cada_oferta_vai_para_o_canal_certo(self):
@@ -196,6 +208,21 @@ class CicloMultiCanal(unittest.TestCase):
         self.assertEqual(len(por_canal["-3"]), 1)   # bota country
         self.assertFalse(any("Bíblia" in t for _, t in env))
         self.assertEqual([c for c, _ in env[:3]], ["-1", "-2", "-3"])  # intercalado
+
+    def test_link_por_canal_etiqueta_ml_e_tag_amazon(self):
+        self._rodar()
+        self.assertEqual(set(self.etiquetas_usadas), {"etq-auto", "padrao"})  # 1 grupo por etiqueta
+        auto = [u for chat, u in self.bot.links if chat == "-1"]
+        perf = [u for chat, u in self.bot.links if chat == "-2"]
+        self.assertTrue(any("etq-auto" in u for u in auto))      # ML do canal Auto: etiqueta própria
+        self.assertTrue(any("tag=tag-auto-20" in u for u in auto))  # Amazon do canal Auto: tag própria
+        self.assertTrue(all("etq-auto" not in u and "tag-auto" not in u for u in perf))  # outros: padrão
+
+    def test_tag_amazon_por_canal(self):
+        from ofertas.pipeline import _tag_amazon
+        self.assertEqual(_tag_amazon("https://www.amazon.com.br/dp/B0?tag=geral-20&x=1", "auto-20"),
+                         "https://www.amazon.com.br/dp/B0?tag=auto-20&x=1")
+        self.assertEqual(_tag_amazon("https://x/dp/B0?tag=geral-20", ""), "https://x/dp/B0?tag=geral-20")
 
     def test_ml_fora_do_ar_nao_desperdica_vagas(self):
         n, env = self._rodar(ml_falha=True)
@@ -291,6 +318,41 @@ class Servico(unittest.TestCase):
         for trecho in ["-m ofertas servico", "AtLogOn", "-RestartCount 999", "MultipleInstances IgnoreNew",
                        "TaskName 'X'", "ExecutionTimeLimit ([TimeSpan]::Zero)"]:
             self.assertIn(trecho, s)
+
+
+class Relatorio(unittest.TestCase):
+    def test_resumo_e_texto(self):
+        import datetime as dt
+        from ofertas import db, relatorio
+        from ofertas.canais import Canal
+        canais = [Canal(id="auto", nome="Auto", chat_id="-1", emoji="🚗"),
+                  Canal(id="perf", nome="Perf", chat_id="-2", emoji="🧴", ml_etiqueta="perf")]
+        with mock.patch.object(db, "_DB", pathlib.Path(tempfile.mkdtemp()) / "r.db"),              mock.patch.object(config, "canais", canais):
+            o1 = Oferta("mercadolivre", "1", "Auxiliar de Partida", "u", preco=50, preco_original=100, desconto_pct=58)
+            o2 = Oferta("amazon", "2", "Kit Lavagem", "u", preco=50, preco_original=100)
+            db.registrar(o1, "auto")
+            db.registrar(o2, "auto")
+            db.registrar_ciclo(40, 2, {"auto": {"boas": 12, "postadas": 2}, "perf": {"boas": 0, "postadas": 0}})
+            db.registrar_evento("ml_sessao", "expirou")
+            db.registrar_evento("fonte_vazia:amazon")
+            db.registrar_evento("falha_post", "auto: chat not found")
+            txt = relatorio.montar(dt.datetime.now() - dt.timedelta(hours=1), "TITULO")
+        for trecho in ["TITULO", "2 posts", "🚗 Auto: 2", "ML 1", "Amazon 1", "🧴 Perf: 0 ⚠️", "Maior desconto: -58%",
+                       "1 rodadas", "sem sessão", "Amazon não trouxe ofertas", "Falha ao postar", "medidos em separado: 🧴 Perf"]:
+            self.assertIn(trecho, txt)
+
+    def test_banco_antigo_ganha_colunas_novas(self):
+        import sqlite3
+        from ofertas import db
+        arq = pathlib.Path(tempfile.mkdtemp()) / "velho.db"
+        c = sqlite3.connect(arq)
+        c.execute("CREATE TABLE postadas (uid TEXT PRIMARY KEY, plataforma TEXT, titulo TEXT, preco REAL, postada_em TEXT)")
+        c.execute("INSERT INTO postadas VALUES ('automotivo|amazon:X','amazon','t',1.0,'2026-01-01T00:00:00')")
+        c.commit(); c.close()
+        with mock.patch.object(db, "_DB", arq):
+            self.assertEqual(db.total_postadas("automotivo"), 1)   # histórico preservado
+            db.registrar(oferta(id_="novo"), "automotivo")          # coluna 'desconto' criada na hora
+            self.assertEqual(db.total_postadas("automotivo"), 2)
 
 
 if __name__ == "__main__":

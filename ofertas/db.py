@@ -1,5 +1,7 @@
 import datetime as dt
+import json
 import sqlite3
+from collections import Counter
 from contextlib import closing
 
 from .caminhos import DATA_DIR
@@ -19,6 +21,10 @@ def _conn() -> sqlite3.Connection:
         " preco REAL,"
         " postada_em TEXT)"
     )
+    if "desconto" not in {r[1] for r in c.execute("PRAGMA table_info(postadas)")}:
+        c.execute("ALTER TABLE postadas ADD COLUMN desconto INTEGER")  # bancos criados antes do relatório
+    c.execute("CREATE TABLE IF NOT EXISTS ciclos (ts TEXT, coletadas INTEGER, postadas INTEGER, detalhe TEXT)")
+    c.execute("CREATE TABLE IF NOT EXISTS eventos (ts TEXT, tipo TEXT, detalhe TEXT)")
     _aplicar_migracao(c)
     return c
 
@@ -35,6 +41,10 @@ def _aplicar_migracao(c: sqlite3.Connection) -> None:
     _MARCADOR.unlink(missing_ok=True)
 
 
+def _agora() -> str:
+    return dt.datetime.now().isoformat(timespec="seconds")
+
+
 def ja_postada(uid: str, dentro_de_dias: int) -> bool:
     with closing(_conn()) as c:
         row = c.execute("SELECT postada_em FROM postadas WHERE uid = ?", (uid,)).fetchone()
@@ -47,10 +57,10 @@ def ja_postada(uid: str, dentro_de_dias: int) -> bool:
 def registrar(oferta: Oferta, canal_id: str = "principal") -> None:
     with closing(_conn()) as c, c:
         c.execute(
-            "INSERT OR REPLACE INTO postadas (uid, plataforma, titulo, preco, postada_em)"
-            " VALUES (?, ?, ?, ?, ?)",
-            (f"{canal_id}|{oferta.uid}", oferta.plataforma, oferta.titulo, oferta.preco,
-             dt.datetime.now().isoformat(timespec="seconds")),
+            "INSERT OR REPLACE INTO postadas (uid, plataforma, titulo, preco, postada_em, desconto)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (f"{canal_id}|{oferta.uid}", oferta.plataforma, oferta.titulo, oferta.preco, _agora(),
+             oferta.desconto),
         )
 
 
@@ -64,3 +74,51 @@ def total_postadas(canal_id: str | None = None) -> int:
         if canal_id:
             return c.execute("SELECT COUNT(*) FROM postadas WHERE uid LIKE ?", (canal_id + "|%",)).fetchone()[0]
         return c.execute("SELECT COUNT(*) FROM postadas").fetchone()[0]
+
+
+# ── Histórico para o relatório ───────────────────────────────────────
+
+def registrar_ciclo(coletadas: int, postadas: int, detalhe: dict) -> None:
+    """detalhe: {canal_id: {"boas": n, "postadas": n}}"""
+    with closing(_conn()) as c, c:
+        c.execute("INSERT INTO ciclos VALUES (?, ?, ?, ?)",
+                  (_agora(), coletadas, postadas, json.dumps(detalhe, ensure_ascii=False)))
+
+
+def registrar_evento(tipo: str, detalhe: str = "") -> None:
+    """Problemas que o relatório resume: ml_sessao, falha_post, fonte_vazia..."""
+    with closing(_conn()) as c, c:
+        c.execute("INSERT INTO eventos VALUES (?, ?, ?)", (_agora(), tipo, detalhe[:300]))
+
+
+def resumo(desde: dt.datetime) -> dict:
+    """Números do período [desde, agora] para o relatório."""
+    d = desde.isoformat(timespec="seconds")
+    with closing(_conn()) as c:
+        posts = c.execute("SELECT uid, plataforma, titulo, desconto FROM postadas WHERE postada_em >= ?",
+                          (d,)).fetchall()
+        ciclos = c.execute("SELECT coletadas, postadas, detalhe FROM ciclos WHERE ts >= ?", (d,)).fetchall()
+        eventos = c.execute("SELECT tipo, detalhe FROM eventos WHERE ts >= ?", (d,)).fetchall()
+
+    por_canal: dict[str, Counter] = {}
+    melhor = None
+    for uid, plataforma, titulo, desconto in posts:
+        canal = uid.split("|", 1)[0] if "|" in uid else "principal"
+        por_canal.setdefault(canal, Counter())[plataforma] += 1
+        if desconto and (melhor is None or desconto > melhor["desconto"]):
+            melhor = {"desconto": desconto, "titulo": titulo, "canal": canal}
+
+    boas: dict[str, list[int]] = {}
+    for _, _, detalhe in ciclos:
+        for canal, v in json.loads(detalhe or "{}").items():
+            boas.setdefault(canal, []).append(v.get("boas", 0))
+
+    return {
+        "posts": len(posts),
+        "por_canal": {k: dict(v) for k, v in por_canal.items()},
+        "melhor": melhor,
+        "ciclos": len(ciclos),
+        "coletadas_media": round(sum(c[0] for c in ciclos) / len(ciclos)) if ciclos else 0,
+        "boas_media": {k: round(sum(v) / len(v)) for k, v in boas.items()},
+        "eventos": dict(Counter(t for t, _ in eventos)),
+    }

@@ -263,7 +263,18 @@ def _criar_links_api(page, urls: list[str], etiqueta: str) -> list[str]:
 
 
 def gerar_links_afiliado(ofertas: list[Oferta]) -> None:
-    """Preenche oferta.url_afiliado via API do Linkbuilder (lotes de 10 URLs)."""
+    """Preenche oferta.url_afiliado via API do Linkbuilder (lotes de 10 URLs), com a etiqueta padrão."""
+    pendentes = [o for o in ofertas if not o.url_afiliado and o.url_produto]
+    if pendentes:
+        gerar_links_por_etiqueta({config.ml_etiqueta: pendentes})
+
+
+def gerar_links_por_etiqueta(grupos: dict[str, list[Oferta]]) -> None:
+    """Como acima, mas com uma etiqueta por grupo, numa única sessão do navegador.
+
+    Cada etiqueta aparece separada no painel de afiliados do ML: dá para medir cada canal.
+    A etiqueta precisa existir na sua conta (Linkbuilder > "Etiqueta em uso"). Se o ML recusar
+    a do grupo, usa a padrão do .env e avisa no log."""
     from playwright.sync_api import sync_playwright
 
     if not tem_sessao():
@@ -271,8 +282,7 @@ def gerar_links_afiliado(ofertas: list[Oferta]) -> None:
     if not config.ml_etiqueta:
         raise RuntimeError("ML_ETIQUETA não configurada no .env "
                            "(é a 'Etiqueta em uso' do Linkbuilder no painel de afiliados)")
-    pendentes = [o for o in ofertas if not o.url_afiliado and o.url_produto]
-    if not pendentes:
+    if not any(o for lista in grupos.values() for o in lista if not o.url_afiliado and o.url_produto):
         return
 
     with sync_playwright() as pw:
@@ -284,12 +294,24 @@ def gerar_links_afiliado(ofertas: list[Oferta]) -> None:
                 raise RuntimeError("Sessão do ML expirou — rode de novo: "
                                    "uv run python -m ofertas ml-login")
             page.wait_for_timeout(1500)  # deixa os scripts de sessão da página rodarem
-            for i in range(0, len(pendentes), 10):
-                lote = pendentes[i:i + 10]
-                links = _criar_links_api(page, [o.url_produto for o in lote], config.ml_etiqueta)
-                for o, link in zip(lote, links):
-                    o.url_afiliado = link
-            log.info("Mercado Livre: %d links de afiliado gerados", len(pendentes))
+            total = 0
+            for etiqueta, ofertas in grupos.items():
+                etiqueta = etiqueta or config.ml_etiqueta
+                pendentes = [o for o in ofertas if not o.url_afiliado and o.url_produto]
+                for i in range(0, len(pendentes), 10):
+                    lote = pendentes[i:i + 10]
+                    urls = [o.url_produto for o in lote]
+                    try:
+                        links = _criar_links_api(page, urls, etiqueta)
+                    except RuntimeError as e:
+                        if etiqueta == config.ml_etiqueta:
+                            raise
+                        log.warning("ML recusou a etiqueta '%s' (%s); usando a padrão", etiqueta, e)
+                        links = _criar_links_api(page, urls, config.ml_etiqueta)
+                    for o, link in zip(lote, links):
+                        o.url_afiliado = link
+                    total += len(lote)
+            log.info("Mercado Livre: %d links de afiliado gerados", total)
         finally:
             ctx.close()
 

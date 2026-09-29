@@ -156,6 +156,15 @@ PAGINA = r"""<!doctype html>
         <div class="fld" style="flex:1"><label>Desconto mínimo % <span class="muted">(vazio = padrão)</span></label><input id="c_desc" type="number" min="0" max="90"></div>
         <div class="fld" style="flex:1"><label>Posts por rodada <span class="muted">(vazio = padrão)</span></label><input id="c_max" type="number" min="1" max="20"></div>
       </div>
+      <div class="row2">
+        <div class="fld" style="flex:1"><label>Etiqueta do ML só deste canal <span class="muted">(opcional)</span></label><input id="c_mletq" placeholder="ex: automotivo"></div>
+        <div class="fld" style="flex:1"><label>Tag da Amazon só deste canal <span class="muted">(opcional)</span></label><input id="c_amztag" placeholder="ex: seusite-auto-20"></div>
+      </div>
+      <div class="help" style="margin:-6px 0 14px">
+        Com etiqueta/tag própria, o painel de afiliados do ML e da Amazon mostra cliques e comissões de cada canal
+        <b>em separado</b> — assim você descobre qual nicho rende mais. Crie antes: no ML em Linkbuilder → “Etiqueta em uso”;
+        na Amazon em Associados → Gerenciar IDs de rastreamento. Vazio = usa a padrão.
+      </div>
       <div class="row">
         <button class="pri" onclick="salvarCanal()">💾 Salvar canal</button>
         <button onclick="fecharForm()">Cancelar</button>
@@ -327,6 +336,7 @@ function desenharCanais(){
   $("#listaCanais").innerHTML = CANAIS.map((c,i)=>{
     const badges = c.nichos.map(k=>`<span class="badge">${esc(nomeNicho(k))}</span>`).join("")
       + (c.palavras.length ? `<span class="badge">🔤 ${c.palavras.length} palavra(s)-chave</span>` : "")
+      + (c.ml_etiqueta || c.amazon_tag ? `<span class="badge">📈 medido em separado</span>` : "")
       + (!c.nichos.length && !c.palavras.length ? `<span class="badge">⚠️ sem filtro: posta de tudo</span>` : "");
     return `<div class="canal ${c.ativo?'':'off'}">
       <span class="emo">${esc(c.emoji)}</span>
@@ -358,6 +368,7 @@ function abrirForm(c, idx){
   $("#c_emoji").value = c.emoji; $("#c_nome").value = c.nome; $("#c_chat").value = c.chat_id;
   $("#c_palavras").value = c.palavras.join(", "); $("#c_excluir").value = c.excluir.join(", ");
   $("#c_desc").value = c.desconto_minimo ?? ""; $("#c_max").value = c.max_posts_por_ciclo ?? "";
+  $("#c_mletq").value = c.ml_etiqueta || ""; $("#c_amztag").value = c.amazon_tag || "";
   NICHOS_SEL = new Set(c.nichos); desenharNichos();
   $("#idsBoxCanal").classList.add("hide");
   $("#formCanal").classList.remove("hide");
@@ -388,6 +399,7 @@ async function salvarCanal(){
     emoji: $("#c_emoji").value.trim() || "📢", nome: $("#c_nome").value.trim(), chat_id: $("#c_chat").value.trim(),
     nichos: [...NICHOS_SEL], palavras: lista($("#c_palavras").value), excluir: lista($("#c_excluir").value),
     desconto_minimo: num($("#c_desc").value), max_posts_por_ciclo: num($("#c_max").value),
+    ml_etiqueta: $("#c_mletq").value.trim(), amazon_tag: $("#c_amztag").value.trim(),
   };
   if(!c.nome || !c.chat_id){ toast("Preencha o nome e o ID do canal.", true); return; }
   if(!c.nichos.length && !c.palavras.length &&

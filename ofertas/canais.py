@@ -26,6 +26,8 @@ class Canal:
     excluir: list[str] = field(default_factory=list)   # títulos com esses termos são barrados
     desconto_minimo: int | None = None                  # None = usa o do config.yaml
     max_posts_por_ciclo: int | None = None
+    ml_etiqueta: str = ""    # etiqueta do Linkbuilder só deste canal (vazio = a do .env): mede o nicho no ML
+    amazon_tag: str = ""     # tag de associado só deste canal (vazio = a do .env): mede o nicho na Amazon
 
     @property
     def rotulo(self) -> str:
@@ -57,6 +59,8 @@ def _de_dict(d: dict) -> Canal:
         palavras=_lista(d.get("palavras")), excluir=_lista(d.get("excluir")),
         desconto_minimo=int(dm) if dm not in (None, "") else None,
         max_posts_por_ciclo=int(mp) if mp not in (None, "") else None,
+        ml_etiqueta=str(d.get("ml_etiqueta") or "").strip(),
+        amazon_tag=str(d.get("amazon_tag") or "").strip(),
     )
 
 
