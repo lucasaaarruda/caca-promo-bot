@@ -114,6 +114,7 @@ def escolher(ofertas: list[Oferta], n: int) -> list[Oferta]:
 
 
 _ultimo_aviso: dict[str, float] = {}
+_ciclos_vazios = 0
 
 
 async def avisar_dono(bot: Bot, texto: str, repetir_apos_h: float = 6) -> None:
@@ -141,6 +142,11 @@ async def executar_ciclo(bot: Bot) -> int:
         return 0
 
     brutas = await asyncio.to_thread(coletar)
+    global _ciclos_vazios
+    _ciclos_vazios = 0 if brutas else _ciclos_vazios + 1
+    if _ciclos_vazios >= 3:
+        await avisar_dono(bot, "⚠️ 3 rodadas seguidas sem coletar nenhuma oferta "
+                               "(fontes bloqueadas, fora do ar ou sem sessão?). Veja o log do bot.")
     boas = {c.id: filtrar(brutas, c) for c in canais}
 
     def _escolher() -> dict[str, list[Oferta]]:

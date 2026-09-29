@@ -181,11 +181,16 @@ async def _job_ciclo(ctx: ContextTypes.DEFAULT_TYPE):
         await pipeline.avisar_dono(ctx.bot, f"⚠️ O ciclo automático falhou: {type(e).__name__}: {e}")
 
 
+async def _avisar_online(app: Application) -> None:
+    nomes = ", ".join(c.rotulo for c in config.canais) or "nenhum canal ativo"
+    await pipeline.avisar_dono(app.bot, f"🟢 Bot online. Canais: {nomes}", repetir_apos_h=0)
+
+
 def rodar():
     if not config.bot_token:
         raise SystemExit("TELEGRAM_BOT_TOKEN não configurado — veja o README (passo 1).")
 
-    app = Application.builder().token(config.bot_token).build()
+    app = Application.builder().token(config.bot_token).post_init(_avisar_online).build()
     app.add_handler(CommandHandler("start", _cmd_start))
     app.add_handler(CommandHandler("id", _cmd_id))
     app.add_handler(CommandHandler("status", _cmd_status))

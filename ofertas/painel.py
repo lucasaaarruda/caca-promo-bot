@@ -21,7 +21,7 @@ from urllib.parse import urlparse
 
 import requests
 
-from . import canais
+from . import autostart, canais, instancia
 from .config import BASE_DIR, DATA_DIR
 from .painel_html import PAGINA
 
@@ -166,13 +166,36 @@ def detectar_ids() -> dict:
     }
 
 
+_cache_auto = {"valor": False, "ate": 0.0}
+
+
+def autostart_ativo() -> bool:
+    """Consulta o Agendador do Windows (lento: ~1s), então guarda o resultado por 30s."""
+    import time
+    if time.time() >= _cache_auto["ate"]:
+        _cache_auto["valor"] = autostart.ativo()
+        _cache_auto["ate"] = time.time() + 30
+    return _cache_auto["valor"]
+
+
+def tail_log(nome: str = "run", n: int = 200) -> list[str]:
+    """Últimas linhas de data/logs/<nome>.log (bot rodando em segundo plano, fora do painel)."""
+    arq = DATA_DIR / "logs" / f"{nome}.log"
+    try:
+        return arq.read_text(encoding="utf-8", errors="replace").splitlines()[-n:]
+    except OSError:
+        return []
+
+
 def status() -> dict:
     env = ler_env()
     tem_navegador = bool(list((DATA_DIR / "pw-browsers").glob("chromium-*")))
     perfil = DATA_DIR / "ml_profile"
     tem_sessao_ml = perfil.exists() and any(perfil.iterdir())
     return {
-        "bot_rodando": bot.rodando(),
+        "bot_rodando": bot.rodando() or bool(instancia.rodando()),
+        "bot_em_segundo_plano": not bot.rodando() and bool(instancia.rodando()),
+        "autostart": autostart_ativo(),
         "acao_rodando": acao.rotulo if acao.rodando() else "",
         "preenchidos": {k: bool(env.get(k)) for k in CHAVES},
         "navegador": tem_navegador,
@@ -266,7 +289,10 @@ class Handler(BaseHTTPRequestHandler):
         elif rota == "/api/logs":
             fonte = urlparse(self.path).query
             alvo = acao if "acao" in fonte else bot
-            self._json({"linhas": list(alvo.linhas)})
+            linhas = list(alvo.linhas)
+            if alvo is bot and not bot.rodando() and instancia.rodando():
+                linhas = ["(bot rodando em segundo plano — mostrando data/logs/run.log)"] + tail_log()
+            self._json({"linhas": linhas})
         elif rota == "/api/canais":
             from . import canais
             from .nichos import catalogo
@@ -296,11 +322,29 @@ class Handler(BaseHTTPRequestHandler):
             salvar_env(filtrados)
             self._json({"ok": True})
         elif rota == "/api/start":
+            if instancia.rodando():
+                return self._json({"ok": False, "erro": "O bot já está rodando em segundo plano."})
             ok = bot.iniciar(["run"], "Bot")
             self._json({"ok": ok, "rodando": bot.rodando()})
         elif rota == "/api/stop":
             bot.parar()
-            self._json({"ok": True, "rodando": bot.rodando()})
+            pid = instancia.rodando()  # bot em segundo plano (iniciado com o Windows)
+            if pid:
+                instancia.encerrar(pid)
+            self._json({"ok": True, "rodando": bot.rodando() or bool(instancia.rodando())})
+        elif rota == "/api/autostart":
+            if dados.get("acao") == "instalar":
+                ok, msg = autostart.instalar()
+            elif dados.get("acao") == "remover":
+                ok, msg = autostart.remover()
+            elif dados.get("acao") == "iniciar":
+                if instancia.rodando():
+                    return self._json({"ok": False, "erro": "O bot já está rodando."})
+                ok, msg = autostart.iniciar_agora()
+            else:
+                return self._json({"erro": "ação desconhecida"}, 400)
+            _cache_auto["ate"] = 0
+            self._json({"ok": ok, "erro": None if ok else msg})
         elif rota == "/api/acao":
             nome = dados.get("nome", "")
             mapa = {

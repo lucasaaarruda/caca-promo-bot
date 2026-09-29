@@ -264,5 +264,34 @@ class Legenda(unittest.TestCase):
         self.assertEqual(texto_botao(o), texto_botao(o))
 
 
+class Servico(unittest.TestCase):
+    def test_espera_cresce_e_tem_teto(self):
+        from ofertas.servico import espera_apos_falha
+        self.assertEqual([espera_apos_falha(n) for n in (1, 2, 3, 4)], [10, 20, 40, 80])
+        self.assertEqual(espera_apos_falha(50), 300)
+
+    def test_trava_de_instancia_unica(self):
+        from ofertas import instancia
+        arq = pathlib.Path(tempfile.mkdtemp()) / "bot.pid"
+        with mock.patch.object(instancia, "ARQ", arq):
+            self.assertIsNone(instancia.rodando())
+            arq.write_text(str(os.getppid()))          # outro processo vivo (o pai deste teste)
+            self.assertEqual(instancia.rodando(), os.getppid())
+            self.assertFalse(instancia.adquirir())      # recusa: já tem dono
+            arq.write_text("999999")                    # PID morto: trava velha não vale
+            self.assertIsNone(instancia.rodando())
+            self.assertTrue(instancia.adquirir())
+            self.assertEqual(arq.read_text(), str(os.getpid()))
+            instancia.liberar()
+            self.assertFalse(arq.exists())
+
+    def test_script_da_tarefa_do_windows(self):
+        from ofertas import autostart
+        s = autostart.script_instalar("X")
+        for trecho in ["-m ofertas servico", "AtLogOn", "-RestartCount 999", "MultipleInstances IgnoreNew",
+                       "TaskName 'X'", "ExecutionTimeLimit ([TimeSpan]::Zero)"]:
+            self.assertIn(trecho, s)
+
+
 if __name__ == "__main__":
     unittest.main()

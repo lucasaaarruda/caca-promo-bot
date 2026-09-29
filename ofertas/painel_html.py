@@ -163,6 +163,22 @@ PAGINA = r"""<!doctype html>
     </div>
   </div>
 
+  <!-- Execução automática -->
+  <div class="card">
+    <h2><span class="n">🚀</span> Execução automática</h2>
+    <p class="muted" style="margin:-6px 0 12px">
+      Liga o bot sozinho quando você entra no Windows, <b>sem janela</b>, e reinicia se ele cair.
+      Com isso ativo você não precisa deixar o painel aberto: use-o só para configurar.
+    </p>
+    <div class="row">
+      <button id="btnAuto" onclick="alternarAuto()">…</button>
+      <button id="btnAutoAgora" class="hide" onclick="iniciarAgora()">▶️ Iniciar agora em segundo plano</button>
+    </div>
+    <p class="muted" style="margin:10px 0 0">
+      Dica: em Configurações → Sistema → Energia, deixe “Suspender” em <b>Nunca</b>. PC dormindo não posta.
+    </p>
+  </div>
+
   <!-- 2. Instalação e testes -->
   <div class="card">
     <h2><span class="n">2</span> Instalação e testes</h2>
@@ -271,7 +287,9 @@ async function atualizar(){
   statusAtual = await (await fetch("/api/status")).json();
   const on = statusAtual.bot_rodando;
   $("#dot").className = "dot" + (on?" on":"");
-  $("#stt").textContent = on ? "Bot rodando" : (statusAtual.pronto ? "Pronto para ligar" : "Falta configurar");
+  $("#btnAuto").textContent = statusAtual.autostart ? "✅ Ligado com o Windows — clique para desativar" : "⚡ Iniciar junto com o Windows";
+  $("#btnAutoAgora").classList.toggle("hide", !statusAtual.autostart || on);
+  $("#stt").textContent = on ? (statusAtual.bot_em_segundo_plano ? "Bot rodando (segundo plano)" : "Bot rodando") : (statusAtual.pronto ? "Pronto para ligar" : "Falta configurar");
   const b = $("#btnBot"); b.textContent = on ? "Desligar bot" : "Ligar bot";
   b.className = on ? "stop" : "pri";
   b.disabled = !on && !statusAtual.pronto;
@@ -393,6 +411,19 @@ async function reiniciarBot(){
   $("#btnReiniciar").classList.add("hide");
   await fetch("/api/stop",{method:"POST"}); await new Promise(r=>setTimeout(r,1500));
   await fetch("/api/start",{method:"POST"}); toast("Bot reiniciado com os canais novos."); atualizar();
+}
+
+async function alternarAuto(){
+  const acao = statusAtual.autostart ? "remover" : "instalar";
+  const r = await (await fetch("/api/autostart",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao})})).json();
+  if(!r.ok){ toast(r.erro || "Não consegui alterar.", true); return; }
+  toast(acao==="instalar" ? "Ativado! O bot vai iniciar sozinho quando você entrar no Windows." : "Início automático desativado.");
+  atualizar();
+}
+async function iniciarAgora(){
+  const r = await (await fetch("/api/autostart",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acao:"iniciar"})})).json();
+  toast(r.ok ? "Iniciando em segundo plano… aguarde alguns segundos." : (r.erro || "Falhou."), !r.ok);
+  setTimeout(atualizar, 4000);
 }
 
 let toastT;

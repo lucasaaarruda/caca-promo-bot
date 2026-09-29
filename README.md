@@ -95,10 +95,17 @@ Cole um link de produto no privado do bot para testar, ou espere o primeiro cicl
 Intervalo entre ciclos, quantos posts por vez, desconto mínimo, horário ativo e o **escopo do canal**. Por padrão o bot pega **ofertas de todas as categorias**. Para focar num nicho (tecnologia, moda, casa, pet…), preencha as listas de `categorias`/`departamentos`/`buscas` no `config.yaml` — há exemplos comentados dentro do arquivo. Edite e **reinicie o bot** (ele só lê a configuração ao iniciar).
 
 ## Deixar rodando sozinho
-- O bot posta enquanto a janela estiver aberta e o PC ligado. O `run.bat` reinicia sozinho se cair.
-- `horario_ativo` no `config.yaml` evita posts de madrugada (padrão 08:00–23:00).
+No painel, cartão **🚀 Execução automática** → **Iniciar junto com o Windows**. Isso cria uma tarefa do
+Agendador do Windows (do seu usuário, sem precisar de administrador) que liga o bot **sem janela** quando você
+entra no PC e o **reinicia se cair** (com espera crescente e aviso no seu Telegram). Com isso ativo, o painel
+serve só para configurar: pode fechá-lo. Pela linha de comando: `python -m ofertas autostart instalar|remover|status`.
+
+- Só uma cópia do bot roda por vez (o painel avisa se já houver uma em segundo plano).
+- Logs em `data/logs/` (`run.log` = o bot, `servico.log` = o supervisor), com rotação automática.
+- Você recebe no privado: 🟢 bot online, ⚠️ bot caiu, ⚠️ sessão do ML expirou, ⚠️ rodadas sem nenhuma oferta.
 - Para o PC não dormir: Configurações → Sistema → Energia → *Suspender: nunca*.
-- Iniciar junto com o Windows: `Win+R` → `shell:startup` → atalho para o `run.bat`.
+- `horario_ativo` no `config.yaml` evita posts de madrugada (padrão 08:00–23:00).
+- Sem o início automático, o `run.bat` continua funcionando (reinicia sozinho, mas exige a janela aberta).
 
 ---
 

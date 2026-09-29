@@ -4,9 +4,22 @@ import logging
 import sys
 
 
-def _log():
-    logging.basicConfig(level=logging.INFO,
-                        format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+def _log(nome: str = "bot"):
+    """Log no console (se houver) e em data/logs/<comando>.log com rotação (1 MB x 5)."""
+    from logging.handlers import RotatingFileHandler
+    from .caminhos import DATA_DIR
+    fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+    raiz = logging.getLogger()
+    raiz.setLevel(logging.INFO)
+    if sys.stderr is not None:  # sem console (pythonw) não há onde escrever
+        console = logging.StreamHandler()
+        console.setFormatter(fmt)
+        raiz.addHandler(console)
+    pasta = DATA_DIR / "logs"
+    pasta.mkdir(exist_ok=True)
+    arquivo = RotatingFileHandler(pasta / f"{nome}.log", maxBytes=1_000_000, backupCount=5, encoding="utf-8")
+    arquivo.setFormatter(fmt)
+    raiz.addHandler(arquivo)
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
@@ -34,8 +47,31 @@ def cmd_check(_):
 
 
 def cmd_run(_):
+    import os
+    from . import instancia
+    # sob o supervisor, quem guarda a trava é ele; avulso, o próprio bot guarda
+    if os.environ.get("OFERTAS_SOB_SUPERVISOR") != "1" and not instancia.adquirir():
+        raise SystemExit(f"O bot já está rodando (PID {instancia.rodando()}). "
+                         "Desligue-o antes (painel: Desligar bot) ou use o que já está no ar.")
     from .bot_interativo import rodar
     rodar()
+
+
+def cmd_servico(_):
+    from . import servico
+    raise SystemExit(servico.executar())
+
+
+def cmd_autostart(args):
+    from . import autostart
+    if args.acao == "instalar":
+        ok, msg = autostart.instalar()
+        print("✅ O bot vai iniciar junto com o Windows." if ok else f"❌ Não consegui instalar: {msg}")
+    elif args.acao == "remover":
+        ok, msg = autostart.remover()
+        print("✅ Início automático removido." if ok else f"❌ Não consegui remover: {msg}")
+    else:
+        print("Ativo" if autostart.ativo() else "Desativado")
 
 
 def cmd_ciclo(_):
@@ -140,7 +176,6 @@ def main():
         sys.stdout.reconfigure(encoding="utf-8")
     except Exception:
         pass
-    _log()
 
     p = argparse.ArgumentParser(prog="ofertas",
                                 description="Bot de ofertas para Telegram com links de afiliado")
@@ -167,5 +202,12 @@ def main():
     pt.add_argument("fonte", choices=["ml", "shopee", "amazon"])
     pt.set_defaults(fn=cmd_testar)
 
+    sub.add_parser("servico", help="roda o bot com reinício automático (usado pelo início com o Windows)"
+                   ).set_defaults(fn=cmd_servico)
+    pa = sub.add_parser("autostart", help="iniciar o bot junto com o Windows")
+    pa.add_argument("acao", choices=["instalar", "remover", "status"])
+    pa.set_defaults(fn=cmd_autostart)
+
     args = p.parse_args()
+    _log(args.cmd)
     args.fn(args)
