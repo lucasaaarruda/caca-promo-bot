@@ -234,5 +234,35 @@ class Qualidade(unittest.TestCase):
             self.assertFalse(relevante(t, ["automotivo"]), t)
 
 
+class Legenda(unittest.TestCase):
+    def test_legenda_completa(self):
+        from ofertas.formatter import montar_caption
+        o = Oferta("mercadolivre", "m", "Auxiliar de Partida", "u", preco=148.45, preco_original=300.0,
+                   desconto_pct=50, extra="⭐ 4.8 · +5mil vendidos · 🚚 Frete grátis · 💠 preço no Pix", nota=4.8, vendas=5000)
+        c = montar_caption(o)
+        for trecho in ["SUPER OFERTA", "R$ 300,00", "R$ 148,45", "-50%", "Você economiza R$ 151,55",
+                       "⭐ 4,8", "+5 mil vendidos", "Frete grátis", "preço no Pix", "Mercado Livre"]:
+            self.assertIn(trecho, c)
+        self.assertEqual(c.count("vendidos"), 1)  # não duplica o que veio no "extra"
+
+    def test_sem_preco_nao_quebra_e_escapa_html(self):
+        from ofertas.formatter import montar_caption
+        c = montar_caption(Oferta("mercadolivre", "x", "Kit <b>& cia", "u"))
+        self.assertIn("&lt;b&gt;&amp; cia", c)
+        self.assertNotIn("De:", c)
+
+    def test_titulo_curto_corta_em_palavra_inteira(self):
+        from ofertas.formatter import titulo_curto
+        t = titulo_curto("Auxiliar de Partida " + "palavra " * 30)
+        self.assertLessEqual(len(t), 96)
+        self.assertTrue(t.endswith("…") and not t.endswith("pala…"))
+        self.assertEqual(titulo_curto("Curto"), "Curto")
+
+    def test_botao_fixo_por_produto(self):
+        from ofertas.formatter import texto_botao
+        o = oferta(id_="z9")
+        self.assertEqual(texto_botao(o), texto_botao(o))
+
+
 if __name__ == "__main__":
     unittest.main()

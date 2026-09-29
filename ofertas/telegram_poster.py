@@ -3,14 +3,14 @@ import logging
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from telegram.constants import ParseMode
 
-from .formatter import montar_caption
+from .formatter import montar_caption, texto_botao
 from .models import Oferta
 
 log = logging.getLogger("ofertas.poster")
 
 
 def teclado_oferta(o: Oferta) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([[InlineKeyboardButton("🛒 Pegar oferta", url=o.url_afiliado)]])
+    return InlineKeyboardMarkup([[InlineKeyboardButton(texto_botao(o), url=o.url_afiliado)]])
 
 
 async def postar_oferta(bot: Bot, oferta: Oferta, chat_id: str | int,

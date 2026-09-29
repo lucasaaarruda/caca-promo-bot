@@ -8,24 +8,85 @@ _PLATAFORMA = {
     "amazon": "📦 Amazon",
 }
 
+# textos do botão: variam de oferta para oferta (fixo por produto, para não mudar ao reenviar)
+_BOTOES = ["🛒 Pegar oferta", "🔥 Aproveitar agora", "🛍 Ver preço e comprar", "⚡ Garantir o meu"]
+
 
 def preco_br(valor: float) -> str:
-    return "R$ " + f"{valor:,.2f}".replace(",", " ").replace(".", ",").replace(" ", ".")
+    return "R$ " + f"{valor:,.2f}".replace(",", " ").replace(".", ",").replace(" ", ".")
+
+
+def texto_botao(o: Oferta) -> str:
+    return _BOTOES[sum(o.uid.encode()) % len(_BOTOES)]
+
+
+def titulo_curto(titulo: str, limite: int = 95) -> str:
+    """Títulos de marketplace vêm entupidos de palavras-chave: corta numa palavra inteira."""
+    t = " ".join(titulo.split())
+    if len(t) <= limite:
+        return t
+    corte = t[:limite].rsplit(" ", 1)[0].rstrip(" ,;:-|/")
+    return corte + "…"
+
+
+def _selo(desconto: int | None) -> str:
+    """Cabeçalho pela força da oferta."""
+    if not desconto:
+        return "🔥"
+    if desconto >= 50:
+        return "🚨 SUPER OFERTA"
+    if desconto >= 35:
+        return "🔥 OFERTA IMPERDÍVEL"
+    return "⚡ OFERTA"
+
+
+def _vendas(n: int) -> str:
+    if n >= 1000:
+        mil = n / 1000
+        return f"+{mil:.0f} mil vendidos" if mil == int(mil) else f"+{mil:.1f} mil vendidos".replace(".", ",")
+    return f"+{n} vendidos"
+
+
+def _detalhes(o: Oferta) -> list[str]:
+    """Linhas de prova social e vantagens (nota, vendas, frete, Pix, cupom...)."""
+    prova = []
+    if o.nota:
+        prova.append(f"⭐ {o.nota:.1f}".replace(".", ","))
+    if o.vendas:
+        prova.append(f"🔥 {_vendas(o.vendas)}")
+
+    vantagens = []
+    for parte in (o.extra or "").split(" · "):
+        parte = parte.strip()
+        # nota e vendas já saíram estruturadas acima; o resto do "extra" são as vantagens
+        if not parte or parte.startswith("⭐") or "vendidos" in parte:
+            continue
+        vantagens.append(escape(parte))
+
+    linhas = []
+    if prova:
+        linhas.append("  ·  ".join(prova))
+    if vantagens:
+        linhas.append("  ·  ".join(vantagens))
+    return linhas
 
 
 def montar_caption(o: Oferta) -> str:
-    linhas = [f"🔥 <b>{escape(o.titulo[:180])}</b>", ""]
+    tem_desconto = bool(o.preco and o.preco_original and o.preco_original > o.preco)
+    desconto = o.desconto if tem_desconto else None
+    linhas = [_selo(desconto), f"<b>{escape(titulo_curto(o.titulo))}</b>", ""]
 
-    if o.preco and o.preco_original and o.preco_original > o.preco:
+    if tem_desconto:
         linhas.append(f"❌ De: <s>{preco_br(o.preco_original)}</s>")
-        selo = f"  🔻 <b>-{o.desconto}%</b>" if o.desconto else ""
+        selo = f"   🔻 <b>-{desconto}%</b>" if desconto else ""
         linhas.append(f"✅ Por: <b>{preco_br(o.preco)}</b>{selo}")
+        linhas.append(f"💰 Você economiza {preco_br(o.preco_original - o.preco)}")
     elif o.preco:
-        selo = f"  🔻 <b>-{o.desconto}%</b>" if o.desconto else ""
-        linhas.append(f"✅ <b>{preco_br(o.preco)}</b>{selo}")
+        linhas.append(f"✅ <b>{preco_br(o.preco)}</b>")
 
-    if o.extra:
-        linhas.append(escape(o.extra))
+    detalhes = _detalhes(o)
+    if detalhes:
+        linhas += [""] + detalhes
 
     linhas += ["", _PLATAFORMA.get(o.plataforma, o.plataforma)]
     return "\n".join(linhas)
