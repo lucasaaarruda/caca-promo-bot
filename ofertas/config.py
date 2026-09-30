@@ -39,13 +39,16 @@ class Config:
         self.amazon_credential_id: str = os.getenv("AMAZON_CREDENTIAL_ID", "").strip()
         self.amazon_credential_secret: str = os.getenv("AMAZON_CREDENTIAL_SECRET", "").strip()
         self.ml_etiqueta: str = os.getenv("ML_ETIQUETA", "").strip()
+        self.ml_app_id: str = os.getenv("ML_APP_ID", "").strip()          # API oficial do ML (opcional)
+        self.ml_app_secret: str = os.getenv("ML_APP_SECRET", "").strip()
         self.shopee_app_id: str = os.getenv("SHOPEE_APP_ID", "").strip()
         self.shopee_app_secret: str = os.getenv("SHOPEE_APP_SECRET", "").strip()
 
         # config.yaml
         self.intervalo_minutos: int = int(geral.get("intervalo_minutos", 45))
         self.max_posts_por_ciclo: int = int(geral.get("max_posts_por_ciclo", 0))
-        self.espacamento_segundos: int = int(geral.get("espacamento_segundos", 120))
+        self.espacamento_segundos: int = int(geral.get("espacamento_segundos", 300))
+        self.variacao_espacamento: int = int(geral.get("variacao_espacamento", 25))  # % para mais ou para menos
         self.nao_repetir_dias: int = int(geral.get("nao_repetir_dias", 7))
         self.link_visivel: bool = bool(geral.get("link_visivel", True))
         self.aviso_amazon: str = str(geral.get("aviso_amazon") or "").strip()
@@ -79,7 +82,8 @@ class Config:
                 chaves = list(dict.fromkeys(k for c in self.canais for k in c.nichos))
                 palavras = list(dict.fromkeys(p for c in self.canais for p in c.palavras))
                 exp = expandir(chaves)
-                self.fonte_ml = {**self.fonte_ml, "categorias": exp["ml"]}
+                self.fonte_ml = {**self.fonte_ml, "categorias": exp["ml"],
+                                 "buscas_api": list(dict.fromkeys(exp["ml_buscas"] + palavras))}
                 self.fonte_amazon = {**self.fonte_amazon, "departamentos": exp["amazon_dep"],
                                      "buscas": list(dict.fromkeys(exp["amazon_buscas"] + palavras))}
                 self.fonte_shopee = {**self.fonte_shopee,

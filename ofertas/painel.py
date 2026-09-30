@@ -41,6 +41,10 @@ CAMPOS = [
      "O canal onde o bot posta. Use 'Detectar IDs'."),
     ("ML_ETIQUETA", "Etiqueta do afiliado", "Mercado Livre", False,
      "A 'Etiqueta em uso' que aparece no Linkbuilder do painel de afiliados."),
+    ("ML_APP_ID", "App ID da API oficial", "Mercado Livre", False,
+     "Opcional. Crie um app em developers.mercadolivre.com.br: libera busca por palavra-chave e leitura de links."),
+    ("ML_APP_SECRET", "Secret da API oficial", "Mercado Livre", True,
+     "Opcional. A chave secreta do mesmo app."),
     ("AMAZON_TAG", "Tag de associado", "Amazon", False,
      "Sua tag do Amazon Associados (ex.: seunome-20)."),
     ("AMAZON_CREDENTIAL_ID", "Creators API — ID", "Amazon", False,
@@ -355,6 +359,7 @@ class Handler(BaseHTTPRequestHandler):
                 "testar-ml": (["testar", "ml"], "Testando Mercado Livre"),
                 "testar-shopee": (["testar", "shopee"], "Testando Shopee"),
                 "testar-amazon": (["testar", "amazon"], "Testando Amazon"),
+                "testar-mlapi": (["testar", "mlapi"], "Testando a API do Mercado Livre"),
             }
             if nome not in mapa:
                 return self._json({"erro": "ação desconhecida"}, 400)

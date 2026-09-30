@@ -152,6 +152,10 @@ PAGINA = r"""<!doctype html>
         <label>Nunca postar títulos com <span class="muted">(opcional)</span></label>
         <textarea id="c_excluir" rows="2" placeholder="separe por vírgula. Ex.: infantil, capinha"></textarea>
       </div>
+      <label style="display:flex;gap:8px;align-items:flex-start;margin:0 0 14px;font-size:13.5px">
+        <input type="checkbox" id="c_semdesc" style="margin-top:3px">
+        <span>Aceitar também produtos <b>sem desconto listado</b>, se forem muito vendidos (500+) e bem avaliados. <span class="muted">Sai do padrão de “só promoção”: use com moderação.</span></span>
+      </label>
       <div class="row2">
         <div class="fld" style="flex:1"><label>Desconto mínimo (%) <span class="muted">(vazio = padrão)</span></label><input id="c_desc" type="number" min="0" max="90"></div>
         <div class="fld" style="flex:1"><label>Posts por rodada <span class="muted">(vazio = padrão)</span></label><input id="c_max" type="number" min="1" max="20"></div>
@@ -197,6 +201,7 @@ PAGINA = r"""<!doctype html>
       <button onclick="acao('testar-ml')">🧪 Testar ML</button>
       <button onclick="acao('testar-shopee')">🧪 Testar Shopee</button>
       <button onclick="acao('testar-amazon')">🧪 Testar Amazon</button>
+      <button onclick="acao('testar-mlapi')">🧪 Testar API do ML</button>
     </div>
     <p class="muted" style="margin:10px 0 6px">Saída:</p>
     <div class="log" id="logAcao">—</div>
@@ -225,6 +230,8 @@ const CAMPOS = [
   ["TELEGRAM_BOT_TOKEN","Token do bot","Telegram",true,"Crie no @BotFather com /newbot e cole aqui."],
   ["TELEGRAM_OWNER_ID","Seu ID de usuário","Telegram",false,"Use “Detectar IDs” depois de salvar o token."],
   ["ML_ETIQUETA","Etiqueta do afiliado","Mercado Livre",false,"A “Etiqueta em uso” do Linkbuilder."],
+  ["ML_APP_ID","App ID da API oficial","Mercado Livre",false,"Opcional. Crie um app em developers.mercadolivre.com.br."],
+  ["ML_APP_SECRET","Secret da API oficial","Mercado Livre",true,"Opcional. A chave secreta do mesmo app."],
   ["AMAZON_TAG","Tag de associado","Amazon",false,"Sua tag do Amazon Associados (ex.: seunome-20)."],
   ["AMAZON_CREDENTIAL_ID","Creators API — ID","Amazon",false,"Opcional (busca automática oficial)."],
   ["AMAZON_CREDENTIAL_SECRET","Creators API — Secret","Amazon",true,"Opcional. Aparece só uma vez."],
@@ -336,6 +343,7 @@ function desenharCanais(){
   $("#listaCanais").innerHTML = CANAIS.map((c,i)=>{
     const badges = c.nichos.map(k=>`<span class="badge">${esc(nomeNicho(k))}</span>`).join("")
       + (c.palavras.length ? `<span class="badge">🔤 ${c.palavras.length} palavra(s)-chave</span>` : "")
+      + (c.aceitar_sem_desconto ? `<span class="badge">🏷 aceita produto sem desconto</span>` : "")
       + (c.ml_etiqueta || c.amazon_tag ? `<span class="badge">📈 medido em separado</span>` : "")
       + (!c.nichos.length && !c.palavras.length ? `<span class="badge">⚠️ sem filtro: posta de tudo</span>` : "");
     return `<div class="canal ${c.ativo?'':'off'}">
@@ -376,6 +384,7 @@ function abrirForm(c, idx){
   $("#c_emoji").value = c.emoji; $("#c_nome").value = c.nome; $("#c_chat").value = c.chat_id;
   $("#c_palavras").value = c.palavras.join(", "); $("#c_excluir").value = c.excluir.join(", ");
   $("#c_desc").value = c.desconto_minimo ?? ""; $("#c_max").value = c.max_posts_por_ciclo ?? "";
+  $("#c_semdesc").checked = !!c.aceitar_sem_desconto;
   $("#c_mletq").value = c.ml_etiqueta || ""; $("#c_amztag").value = c.amazon_tag || "";
   NICHOS_SEL = new Set(c.nichos); desenharNichos();
   $("#idsBoxCanal").classList.add("hide");
@@ -407,6 +416,7 @@ async function salvarCanal(){
     emoji: $("#c_emoji").value.trim() || "📢", nome: $("#c_nome").value.trim(), chat_id: $("#c_chat").value.trim(),
     nichos: [...NICHOS_SEL], palavras: lista($("#c_palavras").value), excluir: lista($("#c_excluir").value),
     desconto_minimo: num($("#c_desc").value), max_posts_por_ciclo: num($("#c_max").value),
+    aceitar_sem_desconto: $("#c_semdesc").checked,
     ml_etiqueta: $("#c_mletq").value.trim(), amazon_tag: $("#c_amztag").value.trim(),
   };
   if(!c.nome || !c.chat_id){ toast("Preencha o nome e o ID do canal.", true); return; }

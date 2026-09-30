@@ -372,6 +372,12 @@ def converter(url: str) -> Oferta:
     except Exception as e:
         log.warning("Não consegui ler a página do produto: %s", e)
 
+    if not titulo:  # a página do produto pede captcha; a API oficial (se configurada) resolve
+        from . import mercadolivre_api
+        via_api = mercadolivre_api.oferta_de_url(url)
+        if via_api:
+            titulo, preco, preco_original, imagem = via_api.titulo, via_api.preco, via_api.preco_original, via_api.imagem
+
     m = _RE_ID.search(url)
     oferta = Oferta(
         plataforma="mercadolivre",

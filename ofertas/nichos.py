@@ -87,6 +87,10 @@ NICHOS: dict[str, dict] = {
     },
     "automotivo": {
         "emoji": "🚗", "nome": "Automotivo",
+        "ml_buscas": ["boina de polimento", "lâmpada led h4", "lâmpada led h7", "bateria 20v ferramentas",
+                      "kit ferramentas parafusadeira", "bicos lavadora alta pressão", "protetor solar para-brisa",
+                      "selante de pneu", "cera automotiva", "aditivo diesel", "abafador esportivo", "kit detalhamento automotivo",
+                      "espuma ativa lava jato", "aromatizante automotivo", "capa de volante", "carregador veicular"],
         # subcategorias do ML (árvore pública): cada uma tem a sua página de ofertas
         "ml": {"MLB188063": "Limpeza Automotiva", "MLB3381": "Som Automotivo", "MLB2227": "Ferramentas para Veículos",
                "MLB22693": "Peças de Carros", "MLB1747": "Acessórios de Carros", "MLB1771": "Acessórios de Motos",
@@ -123,7 +127,11 @@ NICHOS: dict[str, dict] = {
                    "filtro de oleo", "filtro de ar", "correia dentada", "silenciador", "carenagem",
                    "lanterna traseira", "lampada led", "kit xenon", "insulfilm", "alarme automotivo",
                    "alarme de carro", "trava eletrica", "sensor de estacionamento", "cabo de bateria",
-                   "bomba de ar", "aro de roda", "calota", "fluido", "radiador"],
+                   "bomba de ar", "aro de roda", "calota", "fluido", "radiador",
+                   "boina", "boinas", "politriz", "lampada h4", "lampada h7", "led h4", "led h7", "farol de milha",
+                   "capa de volante", "capa de banco", "quebra-sol", "protetor solar para-brisa", "bicos para lavadora",
+                   "engate rapido", "selante", "desengraxante", "aromatizante", "abafador", "ponteira", "catalisador",
+                   "pastilha", "bateria 20v", "parafusadeira", "chave de impacto", "lavadora de pressao"],
         # ...e não pode conter nenhum destes (palavras que enganam: cueca "microfibra", celular "Moto G"...)
         "excluir": ["biblia", "livro", "livros", "colorir", "brinquedo", "brinquedos", "boneca", "pelucia",
                     "mobile", "hot wheels", "devocional", "romance", "cafe com deus", "motorola", "moto g",
@@ -131,6 +139,8 @@ NICHOS: dict[str, dict] = {
     },
     "country": {
         "emoji": "🤠", "nome": "Country (masculino e feminino)",
+        "ml_buscas": ["jaqueta country", "camisa country", "bota country", "boné country", "calça country feminina",
+                      "chapéu country", "cinto country"],
         # categorias do ML onde ficam botas, bonés/chapéus, cintos, calças, camisas, jaquetas e camisetas
         "ml": {"MLB272202": "Botas", "MLB430275": "Bonés, Chapéus e Boinas", "MLB190393": "Cintos",
                "MLB188065": "Calças", "MLB107292": "Camisas", "MLB108803": "Casacos e Jaquetas",
@@ -147,6 +157,7 @@ NICHOS: dict[str, dict] = {
     },
     "perfumes": {
         "emoji": "🧴", "nome": "Perfumes",
+        "ml_buscas": ["perfume árabe", "perfume masculino importado", "perfume feminino importado", "body splash"],
         "ml": {"MLB6284": "Perfumes"},
         "ml_confiavel": True,
         "amazon_dep": {"beauty": "Beleza"},
@@ -158,6 +169,7 @@ NICHOS: dict[str, dict] = {
     },
     "arcondicionado": {
         "emoji": "❄️", "nome": "Ar Condicionado",
+        "ml_buscas": ["ar condicionado split 12000 btu", "ar condicionado inverter", "suporte ar condicionado"],
         "ml": {"MLB1646": "Ares Condicionados"},
         "ml_confiavel": True,
         "amazon_dep": {"appliances": "Eletrodomésticos"},
@@ -240,6 +252,7 @@ def expandir(chaves: list[str]) -> dict:
     amazon_dep: dict[str, str] = {}
     amazon_buscas: list[str] = []
     shopee: list[str] = []
+    ml_buscas: list[str] = []
     for k in chaves:
         n = NICHOS.get(k)
         if not n:
@@ -252,4 +265,7 @@ def expandir(chaves: list[str]) -> dict:
         for kw in n.get("shopee", []):
             if kw not in shopee:
                 shopee.append(kw)
-    return {"ml": ml, "amazon_dep": amazon_dep, "amazon_buscas": amazon_buscas, "shopee": shopee}
+        for kw in n.get("ml_buscas", []):
+            if kw not in ml_buscas:
+                ml_buscas.append(kw)
+    return {"ml": ml, "amazon_dep": amazon_dep, "amazon_buscas": amazon_buscas, "shopee": shopee, "ml_buscas": ml_buscas}

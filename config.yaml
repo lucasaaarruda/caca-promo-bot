@@ -3,7 +3,8 @@
 geral:
   intervalo_minutos: 30        # de quanto em quanto tempo buscar ofertas novas
   max_posts_por_ciclo: 0       # teto de posts por canal em cada rodada; 0 = sem limite (posta enquanto houver oferta válida)
-  espacamento_segundos: 120    # ritmo: a cada N segundos sai um post (dividido entre os canais ativos)
+  espacamento_segundos: 300    # ritmo: cada canal recebe um post a cada N segundos (300 = 5 min); com vários canais eles se intercalam
+  variacao_espacamento: 25     # o intervalo varia até ±25% (mais natural que um relógio); 0 = intervalo exato
   nao_repetir_dias: 7          # não repostar o mesmo produto dentro desse prazo
   horario_ativo: "07:00-23:30" # só posta nesse intervalo (hora do PC); "" = 24h
   link_visivel: true           # mostra também o link escrito no texto do post ("Compre aqui: ..."), além do botão
@@ -29,6 +30,7 @@ fontes:
     ativa: true
     paginas: 1                 # páginas de mercadolivre.com.br/ofertas por categoria (~48 itens cada)
     requisicoes_por_ciclo: 12  # rodízio: quantas categorias consultar por rodada (0 = todas de uma vez)
+    buscas_api_por_ciclo: 6    # com a API oficial (ML_APP_ID/SECRET): quantas palavras-chave buscar por rodada
     categorias: {}             # vazio = todas as categorias.
     # Para um nicho, troque por (id: nome). Exemplos de categorias do Mercado Livre:
     #   MLB1648: Informática

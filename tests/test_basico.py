@@ -576,5 +576,122 @@ class CoberturaEEnvio(unittest.TestCase):
         self.assertEqual((r, bot.fotos, bot.textos), ("ok-texto", 1, 1))
 
 
+class RitmoDosPosts(unittest.TestCase):
+    def test_pausa_varia_dentro_da_faixa_e_nao_e_constante(self):
+        with mock.patch.object(config, "variacao_espacamento", 25):
+            valores = [pipeline._pausa(300) for _ in range(200)]
+        self.assertTrue(all(225 <= v <= 375 for v in valores))
+        self.assertGreater(len(set(round(v) for v in valores)), 50)   # irregular, como um humano
+        with mock.patch.object(config, "variacao_espacamento", 0):
+            self.assertEqual(pipeline._pausa(300), 300)                # 0 = exato
+
+    def test_com_varios_canais_o_ritmo_de_cada_canal_se_mantem(self):
+        import asyncio
+        from ofertas.canais import Canal
+        esperas = []
+
+        async def dorme(t):
+            esperas.append(t)
+
+        canais = [Canal(id="a", nome="A", chat_id="-1"), Canal(id="b", nome="B", chat_id="-2"), Canal(id="c", nome="C", chat_id="-3")]
+        ofs = [Oferta("amazon", f"x{i}", f"Produto numero {i} totalmente diferente {'abcdefgh'[i]}", "https://x/" + str(i), preco=50, preco_original=100) for i in range(6)]
+        bot = FakeBot()
+        with mock.patch.object(config, "canais", canais), mock.patch.object(config, "horario_ativo", ""),              mock.patch.object(config, "espacamento_segundos", 300), mock.patch.object(config, "variacao_espacamento", 0),              mock.patch.object(config, "max_posts_por_ciclo", 0), mock.patch.object(config, "desconto_minimo", 25),              mock.patch.object(pipeline.db, "_DB", pathlib.Path(tempfile.mkdtemp()) / "r.db"),              mock.patch.object(pipeline, "coletar", return_value=ofs), mock.patch.object(pipeline.asyncio, "sleep", new=dorme),              mock.patch.object(pipeline, "avisar_dono", new=mock.AsyncMock()):
+            n = asyncio.run(pipeline.executar_ciclo(bot))
+        self.assertEqual(n, 18)                                        # 3 canais sem filtro x 6 ofertas
+        self.assertEqual(len(esperas), 17)                             # espera entre todos os posts, menos antes do 1º
+        self.assertTrue(all(e == 100 for e in esperas))   # 300s / 3 canais: cada canal posta a cada 5 min
+
+
+class ApiOficialDoML(unittest.TestCase):
+    RESULTADO = {"id": "MLB4012345678", "title": "Lâmpada H4 Led Super Projetor Alto/baixo - Par", "price": 145.55,
+                 "original_price": 279.9, "permalink": "https://produto.mercadolivre.com.br/MLB-4012345678-lampada-h4?x=1#frag",
+                 "thumbnail": "http://http2.mlstatic.com/D_NQ_NP_123-I.jpg", "category_id": "MLB2228", "sold_quantity": 1200,
+                 "shipping": {"free_shipping": True}, "installments": {"quantity": 4, "amount": 36.39, "rate": 0}}
+
+    def test_resultado_de_busca_vira_oferta(self):
+        from ofertas.sources.mercadolivre_api import oferta_de_item
+        o = oferta_de_item(self.RESULTADO)
+        self.assertEqual((o.id_produto, o.preco, o.preco_original, o.vendas, o.categoria), ("MLB4012345678", 145.55, 279.9, 1200, "MLB2228"))
+        self.assertEqual(o.url_produto, "https://produto.mercadolivre.com.br/MLB-4012345678-lampada-h4")
+        self.assertEqual(o.imagem, "https://http2.mlstatic.com/D_NQ_NP_123-O.jpg")   # miniatura -> imagem grande
+        self.assertIn("🚚 Frete grátis", o.extra)
+        self.assertIn("💳 4x de R$ 36,39 sem juros", o.extra)
+        self.assertEqual(o.desconto, 48)
+
+    def test_sem_preco_ou_com_juros_nao_quebra(self):
+        from ofertas.sources.mercadolivre_api import oferta_de_item
+        self.assertIsNone(oferta_de_item({"id": "MLB1", "title": "x"}))
+        d = dict(self.RESULTADO, installments={"quantity": 12, "amount": 30.0, "rate": 1.99}, original_price=None)
+        o = oferta_de_item(d)
+        self.assertNotIn("sem juros", o.extra)
+        self.assertIsNone(o.preco_original)
+
+    def test_pagina_de_catalogo(self):
+        from ofertas.sources.mercadolivre_api import oferta_de_produto_catalogo
+        o = oferta_de_produto_catalogo({"id": "MLB75836344", "name": "Auxiliar de Partida 6 em 1",
+                                        "pictures": [{"url": "https://img/a.jpg"}],
+                                        "buy_box_winner": {"price": 148.45, "original_price": 300.0}})
+        self.assertEqual((o.titulo, o.preco, o.preco_original, o.imagem), ("Auxiliar de Partida 6 em 1", 148.45, 300.0, "https://img/a.jpg"))
+        self.assertEqual(o.url_produto, "https://www.mercadolivre.com.br/p/MLB75836344")
+
+    def test_sem_credenciais_fica_desligada(self):
+        from ofertas.sources import mercadolivre_api as api
+        with mock.patch.object(config, "ml_app_id", ""), mock.patch.object(config, "ml_app_secret", ""):
+            self.assertFalse(api.disponivel())
+            self.assertIsNone(api.oferta_de_url("https://www.mercadolivre.com.br/p/MLB75836344"))
+            self.assertIn("Preencha ML_APP_ID", api.diagnostico()[0])
+
+    def test_busca_em_rodizio_e_para_se_o_ml_negar_acesso(self):
+        from ofertas.sources import mercadolivre_api as api
+        chamadas = []
+
+        def busca(termo, limite=20):
+            chamadas.append(termo)
+            if termo == "b":
+                raise RuntimeError("API do ML /sites/MLB/search respondeu HTTP 403: PolicyAgent")
+            return []
+        api._rodizio = 0
+        with mock.patch.object(config, "fonte_ml", {"buscas_api": ["a", "b", "c", "d"], "buscas_api_por_ciclo": 3}),              mock.patch.object(api, "buscar", side_effect=busca), mock.patch.object(api.time, "sleep"):
+            api.buscar_rodada()
+        self.assertEqual(chamadas, ["a", "b"])   # 403 em "b": não insiste em "c"
+
+    def test_conversor_usa_a_api_quando_a_pagina_pede_captcha(self):
+        from ofertas.models import Oferta as O
+        from ofertas.sources import mercadolivre as ml
+        via_api = O("mercadolivre", "MLB75836344", "Auxiliar de Partida 6 em 1", "", preco=148.45, preco_original=300.0, imagem="https://img/a.jpg")
+
+        def gerar(ofs):
+            for o in ofs:
+                o.url_afiliado = "https://meli.la/abc"
+        with mock.patch.object(ml, "sessao", side_effect=RuntimeError("captcha")),              mock.patch("ofertas.sources.mercadolivre_api.oferta_de_url", return_value=via_api),              mock.patch.object(ml, "gerar_links_afiliado", side_effect=gerar):
+            o = ml.converter("https://www.mercadolivre.com.br/p/MLB75836344")
+        self.assertEqual((o.titulo, o.preco, o.preco_original, o.imagem), ("Auxiliar de Partida 6 em 1", 148.45, 300.0, "https://img/a.jpg"))
+        self.assertEqual(o.url_afiliado, "https://meli.la/abc")
+
+    def test_niches_trazem_buscas_para_a_api(self):
+        from ofertas.nichos import expandir
+        buscas = expandir(["automotivo", "perfumes"])["ml_buscas"]
+        self.assertIn("boina de polimento", buscas)
+        self.assertIn("perfume árabe", buscas)
+
+
+class SemDescontoListado(unittest.TestCase):
+    def test_so_entra_se_o_canal_aceita_e_o_produto_e_campeao(self):
+        from ofertas.canais import Canal
+        campeao = oferta(id_="campeao", preco=26, original=None)
+        campeao.vendas, campeao.nota = 2000, 4.8
+        fraco = oferta(id_="fraco", preco=26, original=None)
+        fraco.vendas, fraco.nota = 20, 4.8
+        com_desconto_baixo = oferta(id_="baixo", preco=90, original=100)   # 10%: tem desconto, mas baixo: não vale a regra
+        com_desconto_baixo.vendas, com_desconto_baixo.nota = 2000, 4.8
+        aceita = Canal(id="a", nome="A", chat_id="-1", aceitar_sem_desconto=True)
+        padrao = Canal(id="p", nome="P", chat_id="-2")
+        with mock.patch.object(config, "desconto_minimo", 25), mock.patch.object(config, "vendas_minimas", 30),              mock.patch.object(pipeline.db, "_DB", pathlib.Path(tempfile.mkdtemp()) / "sd.db"):
+            ids = lambda canal: [o.id_produto for o in pipeline.filtrar([campeao, fraco, com_desconto_baixo], canal)]
+            self.assertEqual(ids(aceita), ["campeao"])
+            self.assertEqual(ids(padrao), [])
+
+
 if __name__ == "__main__":
     unittest.main()

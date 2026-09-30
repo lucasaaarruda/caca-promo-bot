@@ -148,6 +148,11 @@ def cmd_ml_login(_):
 
 
 def cmd_testar(args):
+    if args.fonte == "mlapi":
+        from .sources import mercadolivre_api
+        for linha in mercadolivre_api.diagnostico():
+            print(linha)
+        return
     if args.fonte == "ml":
         from .sources import mercadolivre
         ofertas = mercadolivre.buscar_ofertas()
@@ -212,7 +217,7 @@ def main():
     sub.add_parser("ml-login", help="login único no Mercado Livre (salva a sessão)").set_defaults(fn=cmd_ml_login)
 
     pt = sub.add_parser("testar", help="testa uma fonte sem postar nada")
-    pt.add_argument("fonte", choices=["ml", "shopee", "amazon"])
+    pt.add_argument("fonte", choices=["ml", "shopee", "amazon", "mlapi"])
     pt.set_defaults(fn=cmd_testar)
 
     sub.add_parser("servico", help="roda o bot com reinício automático (usado pelo início com o Windows)"

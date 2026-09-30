@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import random
 import re
 import time
 from dataclasses import replace
@@ -11,7 +12,7 @@ from .canais import Canal
 from .nichos import relevante
 from .config import config, dentro_do_horario
 from .models import Oferta
-from .sources import amazon, mercadolivre, shopee
+from .sources import amazon, mercadolivre, mercadolivre_api, shopee
 from .telegram_poster import postar_oferta
 
 log = logging.getLogger("ofertas.pipeline")
@@ -46,6 +47,11 @@ def coletar() -> list[Oferta]:
                 todas += mercadolivre.buscar_ofertas()
             except Exception as e:
                 log.error("Mercado Livre: %s", e)
+            if mercadolivre_api.disponivel() and config.fonte_ml.get("buscas_api"):
+                try:
+                    todas += mercadolivre_api.buscar_rodada()
+                except Exception as e:
+                    log.error("Mercado Livre (API): %s", e)
         else:
             log.warning("Mercado Livre ativo mas sem sessão de afiliado — rode: uv run python -m ofertas ml-login")
 
@@ -78,7 +84,8 @@ def filtrar(ofertas: list[Oferta], canal: Canal | None = None) -> list[Oferta]:
         if db.ja_postada(f"{canal_id}|{o.uid}", config.nao_repetir_dias):
             continue
         if desconto_min and (o.desconto or 0) < desconto_min:
-            continue
+            if not (canal and canal.aceitar_sem_desconto and not o.desconto and _muito_vendido(o)):
+                continue
         if config.desconto_maximo and (o.desconto or 0) > config.desconto_maximo:
             continue  # desconto irreal: quase sempre preço "de" inflado
         # nota/vendas desconhecidas (a fonte não informa) não reprovam; só as conhecidas e baixas
@@ -96,6 +103,11 @@ def filtrar(ofertas: list[Oferta], canal: Canal | None = None) -> list[Oferta]:
             continue
         aprovadas.append(o)
     return aprovadas
+
+
+def _muito_vendido(o: Oferta) -> bool:
+    """Para canais que aceitam produto sem desconto listado: só os campeões de venda e bem avaliados."""
+    return (o.nota is None or o.nota >= 4.5) and (o.vendas or 0) >= 500
 
 
 def _chave_similar(titulo: str) -> str:
@@ -151,6 +163,13 @@ def _tag_amazon(url: str, tag: str) -> str:
 LOTE = 3  # ofertas por canal em cada passada (o ML gera os links do lote de uma vez só)
 
 
+def _pausa(base: float) -> float:
+    """Intervalo entre dois posts com variação (±X%), para não postar como um relógio: canais de
+    promoção de verdade têm ritmo irregular (4 a 6 min, às vezes uma pausa maior)."""
+    v = max(0.0, min(0.9, config.variacao_espacamento / 100))
+    return base * random.uniform(1 - v, 1 + v)
+
+
 def _prazo_ciclo() -> float:
     """Até quando esta rodada pode continuar postando; o que sobrar fica para a próxima."""
     if config.intervalo_minutos <= 0:
@@ -188,7 +207,6 @@ async def executar_ciclo(bot: Bot) -> int:
     chaves_postadas: dict[str, set[str]] = {c.id: set() for c in canais}  # variações já postadas nesta rodada
     ml_ok = True
     postadas = 0
-    pausa = max(20, config.espacamento_segundos // max(1, len(canais)))
 
     while time.monotonic() < prazo:
         # próximo lote de cada canal (respeitando o teto opcional)
@@ -230,6 +248,8 @@ async def executar_ciclo(bot: Bot) -> int:
         for i in range(max(len(v) for v in lote.values())):
             fila += [(c, lote[c.id][i]) for c in canais if i < len(lote[c.id])]
 
+        # cada canal recebe um post a cada `espacamento_segundos`; com vários canais ativos, eles se intercalam
+        base_pausa = max(20.0, config.espacamento_segundos / max(1, len({c.id for c, _ in fila})))
         for c, o in fila:
             # tira da lista de candidatos de qualquer jeito, para a rodada nunca ficar presa numa oferta
             boas[c.id] = [x for x in boas[c.id] if x.uid != o.uid]
@@ -242,7 +262,7 @@ async def executar_ciclo(bot: Bot) -> int:
                 log.warning("Sem link de afiliado, pulando: %s", o.titulo[:60])
                 continue
             if postadas:
-                await asyncio.sleep(pausa)  # ritmo entre posts: não despeja tudo de uma vez
+                await asyncio.sleep(_pausa(base_pausa))  # ritmo entre posts: não despeja tudo de uma vez
             chave = f"{c.id}|{o.uid}"
             db.registrar(o, c.id)  # antes de postar: se o processo cair no meio, não reposta
             try:
