@@ -338,7 +338,7 @@ class Relatorio(unittest.TestCase):
             db.registrar_evento("falha_post", "auto: chat not found")
             txt = relatorio.montar(dt.datetime.now() - dt.timedelta(hours=1), "TITULO")
         for trecho in ["TITULO", "2 posts", "🚗 Auto: 2", "ML 1", "Amazon 1", "🧴 Perf: 0 ⚠️", "Maior desconto: -58%",
-                       "1 rodadas", "sem sessão", "Amazon não trouxe ofertas", "Falha ao postar", "medidos em separado: 🧴 Perf"]:
+                       "1 rodada · média de 40 ofertas coletadas por rodada", "sem sessão", "Amazon não trouxe ofertas", "Falha ao postar", "medidos em separado: 🧴 Perf"]:
             self.assertIn(trecho, txt)
 
     def test_banco_antigo_ganha_colunas_novas(self):
@@ -443,6 +443,14 @@ class PostaEnquantoHouverOferta(unittest.TestCase):
                      for i, cor in enumerate(["Azul", "Rosa", "Verde"])]
         n, _ = self._rodar(variacoes + self._ofertas(2))
         self.assertEqual(n, 3)   # 1 das 3 cores + 2 produtos diferentes
+
+
+class Concordancia(unittest.TestCase):
+    def test_singular_e_plural_no_relatorio(self):
+        from ofertas.relatorio import _pl
+        self.assertEqual(_pl(1, "post", "posts"), "post")
+        self.assertEqual(_pl(0, "post", "posts"), "posts")
+        self.assertEqual(_pl(2, "rodada", "rodadas"), "rodadas")
 
 
 if __name__ == "__main__":

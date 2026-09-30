@@ -229,7 +229,7 @@ def ml_login() -> None:
     proc = subprocess.Popen([chrome, f"--user-data-dir={PERFIL_DIR}", "--no-first-run",
                              "--no-default-browser-check", URL_LINKBUILDER])
     proc.wait()
-    print(f"✅ Perfil salvo em {PERFIL_DIR} — o bot usa essa sessão sozinho daqui pra frente.")
+    print(f"✅ Perfil salvo em {PERFIL_DIR} — o bot usa essa sessão sozinho daqui para a frente.")
     print('   Teste com: uv run python -m ofertas converter "<link de produto do ML>"')
 
 

@@ -32,9 +32,9 @@ def cmd_check(_):
     for c in config.canais:
         print(f"✅ Canal {c.rotulo}: {c.chat_id}")
     if config.owner_id:
-        print(f"✅ Owner id: {config.owner_id}")
+        print(f"✅ ID do dono: {config.owner_id}")
     if config.amazon_tag:
-        print(f"✅ Amazon tag: {config.amazon_tag}")
+        print(f"✅ Tag da Amazon: {config.amazon_tag}")
     if config.shopee_app_id and config.shopee_app_secret:
         print("✅ Credenciais Shopee")
     from .sources import mercadolivre
@@ -103,7 +103,7 @@ def cmd_converter(args):
     print(f"Título:      {o.titulo}")
     print(f"Preço:       {o.preco}  (de {o.preco_original})  -{o.desconto or 0}%")
     print(f"Imagem:      {o.imagem}")
-    print(f"Link afiliado: {o.url_afiliado}")
+    print(f"Link de afiliado: {o.url_afiliado}")
 
 
 def cmd_postar(args):
@@ -172,10 +172,11 @@ def cmd_testar(args):
 
 
 def main():
-    try:
-        sys.stdout.reconfigure(encoding="utf-8")
-    except Exception:
-        pass
+    for saida in (sys.stdout, sys.stderr):  # o log (stderr) também: sem isso o painel mostra "Ve�culos"
+        try:
+            saida.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
 
     p = argparse.ArgumentParser(prog="ofertas",
                                 description="Bot de ofertas para Telegram com links de afiliado")
@@ -192,7 +193,7 @@ def main():
 
     pp = sub.add_parser("postar", help="converte um link e posta no canal")
     pp.add_argument("url")
-    pp.add_argument("--canal", help="id do canal (padrão: o primeiro)")
+    pp.add_argument("--canal", help="ID do canal (padrão: o primeiro)")
     pp.set_defaults(fn=cmd_postar)
 
     sub.add_parser("instalar-navegador", help="baixa o Chromium usado pelo Linkbuilder (fica em data/)").set_defaults(fn=cmd_instalar_navegador)

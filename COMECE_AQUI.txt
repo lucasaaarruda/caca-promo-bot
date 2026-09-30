@@ -1,48 +1,52 @@
-================================================================
+﻿==============================================================
   BOT DE OFERTAS PARA TELEGRAM  —  COMECE AQUI
-================================================================
+==============================================================
 
-Este bot posta promocoes (Mercado Livre, Shopee, Amazon) no seu
-canal do Telegram com os SEUS links de afiliado.
+Este bot posta promoções (Mercado Livre, Shopee, Amazon) nos seus
+canais do Telegram, cada canal com o seu nicho, sempre com os SEUS
+links de afiliado.
 
-----------------------------------------------------------------
-  JEITO FACIL (recomendado): PAINEL GRAFICO
-----------------------------------------------------------------
+--------------------------------------------------------------
+  JEITO FÁCIL (recomendado): PAINEL GRÁFICO
+--------------------------------------------------------------
 
-  >>> De 2 cliques no arquivo  PAINEL.bat  <<<
+  >>> Dê dois cliques no arquivo  PAINEL.bat  <<<
 
 Ele prepara tudo sozinho e abre um painel no seu navegador, onde
-voce:
-  - preenche a configuracao em formulario (sem mexer em arquivos);
-  - descobre os IDs do Telegram com um botao;
-  - instala o navegador e faz o login do Mercado Livre por botoes;
-  - liga/desliga o bot e ve tudo funcionando ao vivo.
+você:
+  - preenche a configuração em formulário (sem mexer em arquivos);
+  - descobre os IDs do Telegram com um botão;
+  - cria e gerencia os canais (nicho, filtros, etiquetas);
+  - instala o navegador e faz o login do Mercado Livre por botões;
+  - liga e desliga o bot, vê tudo funcionando ao vivo e ativa o
+    início automático junto com o Windows.
 
 Na primeira vez ele pode pedir para instalar o "uv" e reabrir o
-PAINEL.bat - so seguir o que aparecer na tela.
+PAINEL.bat: é só seguir o que aparecer na tela.
 
-Antes de comecar voce precisa de:
+Antes de começar, você precisa de:
   - Um bot criado no @BotFather (Telegram) -> guarde o TOKEN.
   - Um canal no Telegram com o seu bot como ADMINISTRADOR.
   - Suas contas de afiliado (Mercado Livre / Amazon / Shopee).
 
-O passo a passo completo, com telas, esta no arquivo README.md.
+O passo a passo completo, com telas, está no arquivo README.md.
 
-----------------------------------------------------------------
+--------------------------------------------------------------
   DEU ERRO "Failed to spawn: python"?
-----------------------------------------------------------------
-E o Smart App Control do Windows 11. Aperte a tecla Windows,
-digite "Controle inteligente de aplicativos", abra, marque
-DESATIVADO, confirme e reinicie o PC. (Nao desliga o antivirus.)
+--------------------------------------------------------------
 
-----------------------------------------------------------------
+É o Smart App Control do Windows 11. Aperte a tecla Windows,
+digite "Controle inteligente de aplicativos", abra, marque
+DESATIVADO, confirme e reinicie o PC. (Isso não desliga o antivírus.)
+
+--------------------------------------------------------------
   IMPORTANTE
-----------------------------------------------------------------
-- Use as SUAS proprias contas de afiliado (as comissoes vao para
+--------------------------------------------------------------
+
+- Use as SUAS próprias contas de afiliado (as comissões vão para
   quem configurar).
-- Avise no seu canal que sao links de afiliado (exigencia dos
-  programas, principalmente Amazon).
+- Avise no seu canal que são links de afiliado (exigência dos
+  programas, principalmente da Amazon).
 - NUNCA compartilhe o arquivo .env (ele guarda suas senhas).
 
-Duvidas? Veja o README.md ou os comentarios do video.
-================================================================
+Dúvidas? Veja o README.md.

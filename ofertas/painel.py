@@ -9,6 +9,7 @@ Roda um servidor só em 127.0.0.1 e abre no navegador. Dali dá para:
 Sobe com:  uv run python -m ofertas painel   (ou dê 2 cliques em PAINEL.bat)
 """
 import json
+import os
 from dataclasses import asdict
 import secrets
 import subprocess
@@ -34,14 +35,14 @@ HOSTS_OK = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
 CAMPOS = [
     ("TELEGRAM_BOT_TOKEN", "Token do bot", "Telegram", True,
      "Crie no @BotFather com /newbot e cole o token aqui."),
-    ("TELEGRAM_OWNER_ID", "Seu user ID", "Telegram", False,
+    ("TELEGRAM_OWNER_ID", "Seu ID de usuário", "Telegram", False,
      "Use o botão 'Detectar IDs' depois de colocar o token."),
     ("TELEGRAM_CHAT_ID", "ID do canal", "Telegram", False,
      "O canal onde o bot posta. Use 'Detectar IDs'."),
     ("ML_ETIQUETA", "Etiqueta do afiliado", "Mercado Livre", False,
      "A 'Etiqueta em uso' que aparece no Linkbuilder do painel de afiliados."),
     ("AMAZON_TAG", "Tag de associado", "Amazon", False,
-     "Sua tag do Amazon Associados (ex: seunome-20)."),
+     "Sua tag do Amazon Associados (ex.: seunome-20)."),
     ("AMAZON_CREDENTIAL_ID", "Creators API — ID", "Amazon", False,
      "Opcional. Associates Central > Creators API > Aplicativos."),
     ("AMAZON_CREDENTIAL_SECRET", "Creators API — Secret", "Amazon", True,
@@ -106,6 +107,7 @@ class Processo:
             [sys.executable, "-m", "ofertas", *args],
             cwd=str(BASE_DIR), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, encoding="utf-8", errors="replace", bufsize=1,
+            env={**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"},  # acentos certos no log ao vivo
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         threading.Thread(target=self._ler, daemon=True).start()
@@ -135,7 +137,7 @@ acao = Processo()     # ações pontuais (instalar, login, testar)
 # ── Ações auxiliares ──────────────────────────────────────────────────
 
 def detectar_ids() -> dict:
-    """Consulta o Telegram (getUpdates) e sugere owner id e chat id do canal."""
+    """Consulta o Telegram (getUpdates) e sugere o ID do dono e o ID do canal."""
     token = ler_env().get("TELEGRAM_BOT_TOKEN", "")
     if not token:
         return {"erro": "Preencha e salve o token do bot primeiro."}
@@ -280,7 +282,7 @@ class Handler(BaseHTTPRequestHandler):
             self._json(status())
         elif rota == "/api/config":
             env = ler_env()
-            # nunca devolve segredo preenchido em texto puro; manda só se está setado
+            # nunca devolve segredo preenchido em texto puro; manda só se está preenchido
             saida = {}
             for chave, _, _, segredo, _ in CAMPOS:
                 saida[chave] = "" if (segredo and env.get(chave)) else env.get(chave, "")

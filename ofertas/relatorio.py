@@ -8,6 +8,11 @@ _PLATAFORMA = {"mercadolivre": "ML", "shopee": "Shopee", "amazon": "Amazon"}
 _FONTES = {"mercadolivre": "Mercado Livre", "shopee": "Shopee", "amazon": "Amazon"}
 
 
+def _pl(n: int, singular: str, plural: str) -> str:
+    """Concordância: 1 rodada, 2 rodadas."""
+    return singular if n == 1 else plural
+
+
 def _problemas(eventos: dict[str, int]) -> list[str]:
     linhas = []
     if n := eventos.get("ml_sessao"):
@@ -19,7 +24,7 @@ def _problemas(eventos: dict[str, int]) -> list[str]:
     for tipo, n in sorted(eventos.items()):
         if tipo.startswith("fonte_vazia:"):
             fonte = _FONTES.get(tipo.split(":", 1)[1], tipo.split(":", 1)[1])
-            linhas.append(f"🚫 {fonte} não trouxe ofertas em {n} rodada(s) (bloqueio ou fora do ar)")
+            linhas.append(f"🚫 {fonte} não trouxe ofertas em {n} {_pl(n, 'rodada', 'rodadas')} (bloqueio ou fora do ar)")
     return linhas
 
 
@@ -29,7 +34,7 @@ def montar(desde: dt.datetime, titulo: str) -> str:
     linhas = [titulo, ""]
 
     if r["posts"]:
-        linhas.append(f"📨 {r['posts']} posts no período")
+        linhas.append(f"📨 {r['posts']} {_pl(r['posts'], 'post', 'posts')} no período")
         for canal, plat in sorted(r["por_canal"].items(), key=lambda kv: -sum(kv[1].values())):
             det = " · ".join(f"{_PLATAFORMA.get(p, p)} {n}" for p, n in sorted(plat.items(), key=lambda kv: -kv[1]))
             linhas.append(f"  {nomes.get(canal, canal)}: {sum(plat.values())}  ({det})")
@@ -43,9 +48,10 @@ def montar(desde: dt.datetime, titulo: str) -> str:
         linhas += ["", f"🏆 Maior desconto: -{m['desconto']}% em {nomes.get(m['canal'], m['canal'])}",
                    f"   {m['titulo'][:70]}"]
 
-    linhas += ["", f"🔄 {r['ciclos']} rodadas · média de {r['coletadas_media']} ofertas coletadas por rodada"]
+    linhas += ["", f"🔄 {r['ciclos']} {_pl(r['ciclos'], 'rodada', 'rodadas')} · média de {r['coletadas_media']} "
+                       f"{_pl(r['coletadas_media'], 'oferta coletada', 'ofertas coletadas')} por rodada"]
     for canal, n in sorted(r["boas_media"].items()):
-        linhas.append(f"  {nomes.get(canal, canal)}: ~{n} ofertas boas por rodada")
+        linhas.append(f"  {nomes.get(canal, canal)}: ~{n} {_pl(n, 'oferta boa', 'ofertas boas')} por rodada")
     if r["ciclos"] and not r["posts"] and r["coletadas_media"]:
         linhas.append("  💡 Coletou mas nada passou nos filtros: afrouxe vendas_minimas ou nota_minima no config.yaml.")
 

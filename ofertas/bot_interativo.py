@@ -34,7 +34,7 @@ async def _cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "🤖 Bot de ofertas no ar!\n\n"
         "• Cole aqui um link do Mercado Livre, Shopee ou Amazon e eu preparo o post "
         "com o seu link de afiliado.\n"
-        "• /id — mostra o id deste chat (ou do canal, se você encaminhar um post dele)\n"
+        "• /id — mostra o ID deste chat (ou do canal, se você encaminhar um post dele)\n"
         "• /ciclo — roda uma busca de ofertas agora\n"
         "• /status — situação do bot\n"
         "• /relatorio — resumo do dia"
@@ -44,8 +44,8 @@ async def _cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def _cmd_id(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(
         f"Este chat: `{update.effective_chat.id}`\n"
-        f"Seu user id: `{update.effective_user.id}`\n\n"
-        "Para descobrir o id do canal, encaminhe aqui qualquer post dele.",
+        f"Seu ID de usuário: `{update.effective_user.id}`\n\n"
+        "Para descobrir o ID do canal, encaminhe aqui qualquer post dele.",
         parse_mode="Markdown",
     )
 
@@ -90,7 +90,7 @@ async def _receber_link(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not config.owner_id:
         await update.message.reply_text(
             "⚠️ Defina TELEGRAM_OWNER_ID no .env para usar o conversor.\n"
-            f"Seu user id é `{update.effective_user.id}`.", parse_mode="Markdown")
+            f"Seu ID de usuário é `{update.effective_user.id}`.", parse_mode="Markdown")
         return
     if not _e_dono(update):
         return
@@ -139,7 +139,7 @@ async def _receber_forward(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat_origem = getattr(origem, "chat", None)
     if chat_origem:
         await msg.reply_text(
-            f"📢 Id desse canal/grupo: `{chat_origem.id}`\n"
+            f"📢 ID desse canal/grupo: `{chat_origem.id}`\n"
             "Use esse valor no campo “ID do canal” ao criar o canal no painel.",
             parse_mode="Markdown",
         )
@@ -199,7 +199,7 @@ async def _avisar_online(app: Application) -> None:
 
 def rodar():
     if not config.bot_token:
-        raise SystemExit("TELEGRAM_BOT_TOKEN não configurado — veja o README (passo 1).")
+        raise SystemExit("TELEGRAM_BOT_TOKEN não configurado: preencha o token no painel ou no .env (veja o README, passo 3).")
 
     app = Application.builder().token(config.bot_token).post_init(_avisar_online).build()
     app.add_handler(CommandHandler("start", _cmd_start))

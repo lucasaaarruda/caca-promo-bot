@@ -45,7 +45,7 @@ winget install astral-sh.uv
 Feche e reabra o PowerShell depois de instalar.
 
 ### 1. Baixar e abrir a pasta
-Baixe o .zip, extraia para uma pasta (ex: `C:\ofertas-bot`) e entre nela no PowerShell:
+Baixe o .zip, extraia para uma pasta (ex.: `C:\ofertas-bot`) e entre nela no PowerShell:
 ```powershell
 cd C:\ofertas-bot
 ```
@@ -70,7 +70,7 @@ notepad .env
 ```
 Preencha (o que você não tiver ainda, deixe em branco e preencha depois):
 - `TELEGRAM_BOT_TOKEN` — o token do passo 3.
-- `TELEGRAM_OWNER_ID` e `TELEGRAM_CHAT_ID` — o jeito fácil: salve o token, rode o bot (passo 7), mande `/id` para ele no privado (dá o seu **owner id**) e encaminhe um post do canal para ele (dá o **chat id**). Depois cole os dois no `.env`.
+- `TELEGRAM_OWNER_ID` e `TELEGRAM_CHAT_ID` — o jeito fácil: salve o token, rode o bot (passo 7), mande `/id` para ele no privado (dá o seu **ID de usuário**) e encaminhe um post do canal para ele (dá o **ID do canal**). Depois cole os dois no `.env`.
 - `ML_ETIQUETA` — a "Etiqueta em uso" que aparece no [Linkbuilder](https://www.mercadolivre.com.br/afiliados/linkbuilder) do painel de afiliados do Mercado Livre.
 - `AMAZON_TAG` — sua tag do [Amazon Associados](https://associados.amazon.com.br) (algo como `seunome-20`).
 - `AMAZON_CREDENTIAL_ID` / `SECRET` — opcional (Creators API). Sem isso o bot funciona mesmo assim.
@@ -92,7 +92,7 @@ Cole um link de produto no privado do bot para testar, ou espere o primeiro cicl
 ---
 
 ## Ajustes — `config.yaml`
-Intervalo entre ciclos, quantos posts por vez, desconto mínimo, horário ativo e o **escopo do canal**. Por padrão o bot pega **ofertas de todas as categorias**. Para focar num nicho (tecnologia, moda, casa, pet…), preencha as listas de `categorias`/`departamentos`/`buscas` no `config.yaml` — há exemplos comentados dentro do arquivo. Edite e **reinicie o bot** (ele só lê a configuração ao iniciar).
+Intervalo entre rodadas, ritmo dos posts, limite opcional de posts, filtros de qualidade (desconto, nota, vendas), horário ativo e relatório diário. Os **nichos** de cada canal são escolhidos na seção **Canais** do painel; as listas de `categorias`/`departamentos`/`buscas` do `config.yaml` só valem para um canal sem filtro (que posta de tudo) — há exemplos comentados dentro do arquivo. Edite e **reinicie o bot** (ele só lê a configuração ao iniciar).
 
 ## Deixar rodando sozinho
 No painel, cartão **🚀 Execução automática** → **Iniciar junto com o Windows**. Isso cria uma tarefa do
@@ -136,5 +136,10 @@ ofertas/
 ├── formatter.py       # visual do post
 ├── db.py              # banco anti-repetição
 ├── config.py          # lê .env + config.yaml
+├── canais.py          # canais do Telegram (nicho, filtros, etiqueta própria)
+├── nichos.py          # catálogo de nichos e regras de relevância
+├── relatorio.py       # relatório diário no seu privado
+├── servico.py         # supervisor: reinicia o bot se cair
+├── autostart.py       # iniciar junto com o Windows
 └── sources/           # mercadolivre.py, shopee.py, amazon.py
 ```

@@ -1,5 +1,5 @@
 """Iniciar o bot junto com o Windows, sem janela: uma tarefa agendada do próprio Windows que,
-ao você entrar na sessão, roda `python -m ofertas servico` (o supervisor que reinicia o bot se cair).
+quando você entrar na sessão, roda `python -m ofertas servico` (o supervisor que reinicia o bot se cair).
 Não precisa de administrador: a tarefa é do seu usuário."""
 import base64
 import subprocess

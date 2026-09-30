@@ -128,7 +128,7 @@ PAGINA = r"""<!doctype html>
       <h3 id="fcTitulo">Novo canal</h3>
       <div class="row2">
         <div class="fld" style="flex:0 0 90px"><label>Emoji</label><input id="c_emoji" maxlength="4" value="📢"></div>
-        <div class="fld" style="flex:1"><label>Nome do canal</label><input id="c_nome" placeholder="ex: Perfumes"></div>
+        <div class="fld" style="flex:1"><label>Nome do canal</label><input id="c_nome" placeholder="Ex.: Perfumes"></div>
       </div>
       <div class="fld">
         <label>ID do canal no Telegram</label>
@@ -145,20 +145,20 @@ PAGINA = r"""<!doctype html>
       </div>
       <div class="fld">
         <label>Palavras-chave próprias <span class="muted">(opcional)</span></label>
-        <textarea id="c_palavras" rows="2" placeholder="separe por vírgula. ex: bicicleta, capacete ciclista"></textarea>
+        <textarea id="c_palavras" rows="2" placeholder="separe por vírgula. Ex.: bicicleta, capacete ciclista"></textarea>
         <div class="help">Servem para <b>buscar</b> ofertas e para <b>conferir</b> que o produto é do nicho. É assim que você cria um nicho novo.</div>
       </div>
       <div class="fld">
         <label>Nunca postar títulos com <span class="muted">(opcional)</span></label>
-        <textarea id="c_excluir" rows="2" placeholder="separe por vírgula. ex: infantil, capinha"></textarea>
+        <textarea id="c_excluir" rows="2" placeholder="separe por vírgula. Ex.: infantil, capinha"></textarea>
       </div>
       <div class="row2">
-        <div class="fld" style="flex:1"><label>Desconto mínimo % <span class="muted">(vazio = padrão)</span></label><input id="c_desc" type="number" min="0" max="90"></div>
+        <div class="fld" style="flex:1"><label>Desconto mínimo (%) <span class="muted">(vazio = padrão)</span></label><input id="c_desc" type="number" min="0" max="90"></div>
         <div class="fld" style="flex:1"><label>Posts por rodada <span class="muted">(vazio = padrão)</span></label><input id="c_max" type="number" min="1" max="20"></div>
       </div>
       <div class="row2">
-        <div class="fld" style="flex:1"><label>Etiqueta do ML só deste canal <span class="muted">(opcional)</span></label><input id="c_mletq" placeholder="ex: automotivo"></div>
-        <div class="fld" style="flex:1"><label>Tag da Amazon só deste canal <span class="muted">(opcional)</span></label><input id="c_amztag" placeholder="ex: seusite-auto-20"></div>
+        <div class="fld" style="flex:1"><label>Etiqueta do ML só deste canal <span class="muted">(opcional)</span></label><input id="c_mletq" placeholder="Ex.: automotivo"></div>
+        <div class="fld" style="flex:1"><label>Tag da Amazon só deste canal <span class="muted">(opcional)</span></label><input id="c_amztag" placeholder="Ex.: seusite-auto-20"></div>
       </div>
       <div class="help" style="margin:-6px 0 14px">
         Com etiqueta/tag própria, o painel de afiliados do ML e da Amazon mostra cliques e comissões de cada canal
@@ -223,9 +223,9 @@ let CFG = {}, statusAtual = {};
 
 const CAMPOS = [
   ["TELEGRAM_BOT_TOKEN","Token do bot","Telegram",true,"Crie no @BotFather com /newbot e cole aqui."],
-  ["TELEGRAM_OWNER_ID","Seu user ID","Telegram",false,"Use “Detectar IDs” depois de salvar o token."],
+  ["TELEGRAM_OWNER_ID","Seu ID de usuário","Telegram",false,"Use “Detectar IDs” depois de salvar o token."],
   ["ML_ETIQUETA","Etiqueta do afiliado","Mercado Livre",false,"A “Etiqueta em uso” do Linkbuilder."],
-  ["AMAZON_TAG","Tag de associado","Amazon",false,"Sua tag do Amazon Associados (ex: seunome-20)."],
+  ["AMAZON_TAG","Tag de associado","Amazon",false,"Sua tag do Amazon Associados (ex.: seunome-20)."],
   ["AMAZON_CREDENTIAL_ID","Creators API — ID","Amazon",false,"Opcional (busca automática oficial)."],
   ["AMAZON_CREDENTIAL_SECRET","Creators API — Secret","Amazon",true,"Opcional. Aparece só uma vez."],
   ["SHOPEE_APP_ID","App ID","Shopee",false,"Painel de afiliados > “Abrir API”."],

@@ -17,11 +17,11 @@ filtros:
   vendas_minimas: 30           # só posta produto com >= N vendas (quando a loja informa); 0 = ignora
   preco_minimo: 0              # 0 = sem limite
   preco_maximo: 0              # 0 = sem limite
-  palavras_bloqueadas: []      # ex: [capinha, película] — ignora ofertas com essas palavras
+  palavras_bloqueadas: []      # ex.: [capinha, película] — ignora ofertas com essas palavras
 
 # Por padrão o bot pega ofertas de TODAS as categorias.
-# JEITO FÁCIL de escolher um nicho: use o seletor "Categorias do canal" no PAINEL
-# (marca com o mouse — substitui as listas abaixo, sem editar este arquivo).
+# JEITO FÁCIL de escolher um nicho: crie um canal na seção "Canais" do PAINEL e marque os nichos
+# (isso substitui as listas abaixo, sem editar este arquivo).
 # JEITO MANUAL/AVANÇADO: preencha as listas abaixo (veja os exemplos comentados).
 fontes:
   mercadolivre:
@@ -52,13 +52,13 @@ fontes:
     #   toys: Brinquedos
     #   beauty: Beleza
     #   fashion: Moda
-    buscas: []                 # termos livres extras, ex: [echo dot, air fryer]
+    buscas: []                 # termos livres extras, ex.: [echo dot, air fryer]
 
   shopee:
     ativa: true
     limite: 40                 # total de produtos pedidos à Open API por ciclo
-    buscas: []                 # vazio = ofertas em destaque da Shopee (todas categorias).
-    # Para um nicho, liste palavras-chave, ex:
+    buscas: []                 # vazio = ofertas em destaque da Shopee (todas as categorias).
+    # Para um nicho, liste palavras-chave, ex.:
     #   - fone bluetooth
     #   - tênis
     #   - panela

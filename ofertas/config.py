@@ -113,7 +113,7 @@ def verificar() -> list[str]:
     if not config.canais:
         pendencias.append("Nenhum canal ativo (crie um no painel, seção Canais)")
     if not config.owner_id:
-        pendencias.append("TELEGRAM_OWNER_ID (seu user id — mande /id para o bot)")
+        pendencias.append("TELEGRAM_OWNER_ID (seu ID de usuário — mande /id para o bot)")
     if not config.amazon_tag:
         pendencias.append("AMAZON_TAG (tag/Store ID do Amazon Associates)")
     if config.fonte_amazon.get("ativa") and not (config.amazon_credential_id and config.amazon_credential_secret):
