@@ -47,10 +47,26 @@ def _categorias() -> dict[str, str]:
     return dict(cats) if isinstance(cats, dict) else {str(c): str(c) for c in cats}
 
 
+_rodizio = 0
+
+
+def _categorias_da_rodada() -> dict[str, str]:
+    """Rodízio: só N categorias por rodada (fonte ml.requisicoes_por_ciclo; 0 = todas), para cobrir muitas
+    categorias sem martelar o site. Com 30 categorias e 10 por rodada, todas passam a cada 3 rodadas."""
+    global _rodizio
+    todas = list(_categorias().items()) or [("", "todas")]
+    por_rodada = int(config.fonte_ml.get("requisicoes_por_ciclo", 0))
+    if por_rodada <= 0 or por_rodada >= len(todas):
+        return dict(todas)
+    inicio = _rodizio % len(todas)
+    _rodizio += por_rodada
+    return dict((todas + todas)[inicio:inicio + por_rodada])
+
+
 def buscar_ofertas() -> list[Oferta]:
     """Página de ofertas do ML, filtrada pelas categorias do config (ofertas?category=MLB...)."""
     paginas = max(1, int(config.fonte_ml.get("paginas", 1)))
-    categorias = _categorias() or {"": "todas"}
+    categorias = _categorias_da_rodada()
     s = sessao()
     ofertas: dict[str, Oferta] = {}
     for cat_id, nome in categorias.items():
@@ -116,6 +132,10 @@ def _parse_card(card) -> Oferta | None:
     pix = card.select_one(".poly-price__unit-description")
     if pix and "pix" in pix.get_text().lower():
         partes.append("💠 preço no Pix")
+    m = re.search(r"(\d{1,2})x\s*R\$\s*([\d.]+)\s*,?\s*(\d{2})?\s*sem juros", card.get_text(" ", strip=True), re.I)
+    if m and int(m.group(1)) >= 2:
+        valor = m.group(2) + ("," + m.group(3) if m.group(3) else "")
+        partes.append(f"💳 {m.group(1)}x de R$ {valor} sem juros")
     bloco_preco = card.select_one(".poly-component__price")
     if bloco_preco and re.search(r"OFF\s+com\s+cupom", bloco_preco.get_text(" ", strip=True), re.I):
         partes.append("🎟 Preço com cupom do ML (ative o cupom na página do produto)")

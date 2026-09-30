@@ -505,5 +505,76 @@ class CupomLinkEArCondicionado(unittest.TestCase):
         self.assertEqual({n["chave"]: n["desconto_sugerido"] for n in catalogo()}["arcondicionado"], 10)
 
 
+class CoberturaEEnvio(unittest.TestCase):
+    def test_rodizio_de_categorias_do_ml_cobre_todas_e_da_a_volta(self):
+        from ofertas.sources import mercadolivre as ml
+        cats = {f"MLB{i}": f"c{i}" for i in range(1, 6)}
+        ml._rodizio = 0
+        with mock.patch.object(config, "fonte_ml", {"ativa": True, "categorias": cats, "requisicoes_por_ciclo": 2}):
+            rodadas = [list(ml._categorias_da_rodada()) for _ in range(3)]
+        self.assertEqual(rodadas, [["MLB1", "MLB2"], ["MLB3", "MLB4"], ["MLB5", "MLB1"]])
+        with mock.patch.object(config, "fonte_ml", {"ativa": True, "categorias": cats, "requisicoes_por_ciclo": 0}):
+            self.assertEqual(len(ml._categorias_da_rodada()), 5)   # 0 = todas de uma vez
+
+    def test_automotivo_cobre_iluminacao_escapamento_e_detailing(self):
+        from ofertas.nichos import categorias_confiaveis
+        conf = categorias_confiaveis(["automotivo"])
+        for cid in ("MLB2228", "MLB63532", "MLB433258", "MLB263726", "MLB2227"):  # iluminação, escapamentos, boinas, ceras, ferramentas
+            self.assertIn(cid, conf)
+
+    def test_parcelas_sem_juros_do_card_do_ml(self):
+        from bs4 import BeautifulSoup
+        from ofertas.sources.mercadolivre import _parse_card
+        base = ('<div class="poly-card"><a class="poly-component__title" href="https://www.mercadolivre.com.br/p/MLB9">Produto</a>'
+                '<div class="poly-component__price"><div class="poly-price__current"><span class="andes-money-amount__fraction">1.188</span></div>{}</div></div>')
+        com = _parse_card(BeautifulSoup(base.format("ou R$ 1.288 em 10x R$ 128 , 80 sem juros"), "lxml").select_one("div.poly-card"))
+        self.assertIn("💳 10x de R$ 128,80 sem juros", com.extra)
+        sem = _parse_card(BeautifulSoup(base.format("em 1x R$ 1.188 sem juros"), "lxml").select_one("div.poly-card"))
+        self.assertFalse(sem.extra and "sem juros" in sem.extra)   # 1x não é parcelamento
+
+    def _envio(self, falhas, erro):
+        import asyncio
+        from ofertas import telegram_poster as tp
+        o = Oferta("mercadolivre", "e1", "Produto", "https://meli.la/x", preco=10, imagem="https://img/x.jpg")
+
+        class Bot:
+            def __init__(self):
+                self.fotos, self.textos = 0, 0
+
+            async def send_photo(self, *a, **k):
+                self.fotos += 1
+                if self.fotos <= falhas:
+                    raise erro
+                return "ok-foto"
+
+            async def send_message(self, *a, **k):
+                self.textos += 1
+                return "ok-texto"
+
+        bot = Bot()
+        with mock.patch.object(tp.asyncio, "sleep", new=mock.AsyncMock()):
+            try:
+                r = asyncio.run(tp.postar_oferta(bot, o, "-1"))
+            except Exception as e:
+                r = e
+        return r, bot
+
+    def test_queda_de_rede_repete_e_depois_envia(self):
+        from telegram.error import NetworkError
+        r, bot = self._envio(2, NetworkError("httpx.ConnectError: "))
+        self.assertEqual((r, bot.fotos, bot.textos), ("ok-foto", 3, 0))
+
+    def test_rede_fora_do_ar_desiste_sem_cair_para_texto(self):
+        from telegram.error import NetworkError
+        r, bot = self._envio(99, NetworkError("httpx.ConnectError: "))
+        self.assertIsInstance(r, NetworkError)
+        self.assertEqual((bot.fotos, bot.textos), (3, 0))   # 3 tentativas; a oferta volta na próxima rodada
+
+    def test_imagem_recusada_ainda_cai_para_texto(self):
+        from telegram.error import BadRequest
+        r, bot = self._envio(1, BadRequest("Wrong file identifier/HTTP URL specified"))
+        self.assertEqual((r, bot.fotos, bot.textos), ("ok-texto", 1, 1))
+
+
 if __name__ == "__main__":
     unittest.main()

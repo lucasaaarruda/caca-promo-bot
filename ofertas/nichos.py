@@ -91,7 +91,15 @@ NICHOS: dict[str, dict] = {
         "ml": {"MLB188063": "Limpeza Automotiva", "MLB3381": "Som Automotivo", "MLB2227": "Ferramentas para Veículos",
                "MLB22693": "Peças de Carros", "MLB1747": "Acessórios de Carros", "MLB1771": "Acessórios de Motos",
                "MLB243551": "Peças de Motos", "MLB456111": "Lubrificantes e Fluidos", "MLB2239": "Segurança Veicular",
-               "MLB2238": "Pneus e Acessórios"},
+               "MLB2238": "Pneus e Acessórios",
+               # subcategorias: cada uma tem a sua própria página de ofertas (a da categoria-mãe mostra só ~48)
+               "MLB2228": "Iluminação", "MLB63532": "Escapamentos", "MLB191834": "Filtros", "MLB6789": "Freios",
+               "MLB22648": "Suspensão e Direção", "MLB2220": "Baterias", "MLB440135": "Infladores",
+               "MLB455304": "Ferramentas para Baterias", "MLB271120": "Guinchos", "MLB60657": "Chaves",
+               "MLB114675": "Acessórios Exteriores", "MLB114676": "Acessórios Interiores",
+               "MLB433258": "Boinas", "MLB263726": "Ceras", "MLB263728": "Polidor", "MLB263727": "Panos",
+               "MLB431864": "Shampoo para Carros", "MLB363814": "Tratamentos", "MLB392348": "Seladores",
+               "MLB430584": "Removedores de Arranhões", "MLB429409": "Abrilhantadores"},
         "ml_confiavel": True,  # a categoria já prova que é do nicho: só as exclusões valem
         "amazon_dep": {"automotive": "Automotivo"},
         "shopee": ["acessório carro", "suporte veicular", "capacete"],
