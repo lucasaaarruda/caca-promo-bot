@@ -762,5 +762,42 @@ class ErrosDoTelegram(unittest.TestCase):
         self.assertIsNotNone(cap.records[0].exc_info)           # bug real continua com o detalhe
 
 
+class PainelTelegram(unittest.TestCase):
+    def test_queda_de_conexao_repete_e_depois_explica_em_portugues(self):
+        import requests
+        from ofertas import painel
+        chamadas = []
+
+        def cai(*a, **k):
+            chamadas.append(1)
+            raise requests.ConnectionError("('Connection aborted.', ConnectionResetError(10054))")
+        with mock.patch.object(painel.requests, "get", side_effect=cai), mock.patch("time.sleep"):
+            with self.assertRaises(RuntimeError) as ctx:
+                painel._telegram("getUpdates", "token")
+        self.assertEqual(len(chamadas), 3)
+        self.assertIn("conexão com o Telegram foi interrompida", str(ctx.exception))
+        self.assertNotIn("10054", str(ctx.exception))          # sem o texto cru da biblioteca
+
+    def test_recupera_se_a_segunda_tentativa_funciona(self):
+        import requests
+        from ofertas import painel
+        respostas = [requests.ConnectionError("cai"), mock.Mock(json=lambda: {"ok": True, "result": []})]
+
+        def get(*a, **k):
+            r = respostas.pop(0)
+            if isinstance(r, Exception):
+                raise r
+            return r
+        with mock.patch.object(painel.requests, "get", side_effect=get), mock.patch("time.sleep"):
+            self.assertEqual(painel._telegram("getUpdates", "token"), {"ok": True, "result": []})
+
+    def test_detectar_com_o_bot_ligado_explica_o_caminho_alternativo(self):
+        from ofertas import painel
+        with mock.patch.object(painel, "ler_env", return_value={"TELEGRAM_BOT_TOKEN": "x"}),              mock.patch.object(painel.instancia, "rodando", return_value=1234),              mock.patch.object(painel.bot, "rodando", return_value=False),              mock.patch.object(painel, "_telegram", side_effect=AssertionError("não devia chamar o Telegram")):
+            r = painel.detectar_ids()
+        self.assertIn("encaminhe um post do canal para o bot", r["erro"])
+        self.assertIn("Telegram Web", r["erro"])
+
+
 if __name__ == "__main__":
     unittest.main()

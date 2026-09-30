@@ -140,16 +140,42 @@ acao = Processo()     # ações pontuais (instalar, login, testar)
 
 # ── Ações auxiliares ──────────────────────────────────────────────────
 
+def _telegram(metodo: str, token: str, **json_corpo) -> dict:
+    """Chama a API do Telegram; repete 3x se a conexão cair (queda de rede é comum e passageira).
+    Levanta RuntimeError com uma mensagem em português, sem o texto cru da biblioteca."""
+    import time
+    ultimo = None
+    for tentativa in range(3):
+        try:
+            if json_corpo:
+                r = requests.post(f"https://api.telegram.org/bot{token}/{metodo}", json=json_corpo, timeout=20)
+            else:
+                r = requests.get(f"https://api.telegram.org/bot{token}/{metodo}", timeout=20)
+            return r.json()
+        except (requests.ConnectionError, requests.Timeout) as e:
+            ultimo = e
+            time.sleep(1.5 * (tentativa + 1))
+        except ValueError as e:  # resposta que não é JSON
+            raise RuntimeError("O Telegram respondeu algo inesperado. Tente de novo em instantes.") from e
+    raise RuntimeError("A conexão com o Telegram foi interrompida (queda de rede, VPN ou antivírus). "
+                       "Tente de novo em alguns segundos.") from ultimo
+
+
 def detectar_ids() -> dict:
     """Consulta o Telegram (getUpdates) e sugere o ID do dono e o ID do canal."""
     token = ler_env().get("TELEGRAM_BOT_TOKEN", "")
     if not token:
         return {"erro": "Preencha e salve o token do bot primeiro."}
+    if bot.rodando() or instancia.rodando():
+        # com o bot ligado, ele já "escuta" o Telegram e o painel não consegue ler as mensagens (só um por vez)
+        return {"erro": "Com o bot ligado o Telegram não deixa o painel ler as mensagens. Alternativas: "
+                        "(1) encaminhe um post do canal para o bot no privado: ele responde com o ID do canal; ou "
+                        "(2) abra o canal no Telegram Web e copie o número que aparece depois do # na barra de "
+                        "endereço (começa com -100)."}
     try:
-        r = requests.get(f"https://api.telegram.org/bot{token}/getUpdates", timeout=20)
-        dados = r.json()
-    except Exception as e:
-        return {"erro": f"Não consegui falar com o Telegram: {e}"}
+        dados = _telegram("getUpdates", token)
+    except RuntimeError as e:
+        return {"erro": str(e)}
     if not dados.get("ok"):
         return {"erro": f"Telegram recusou o token: {dados.get('description', '?')}"}
 
@@ -219,11 +245,9 @@ def testar_canal(chat_id: str, nome: str) -> dict:
     if not chat_id:
         return {"erro": "Canal sem ID."}
     try:
-        r = requests.post(f"https://api.telegram.org/bot{token}/sendMessage", timeout=20,
-                          json={"chat_id": chat_id, "text": f"✅ Teste: o bot está conectado ao canal {nome}."})
-        dados = r.json()
-    except Exception as e:
-        return {"erro": f"Não consegui falar com o Telegram: {e}"}
+        dados = _telegram("sendMessage", token, chat_id=chat_id, text=f"✅ Teste: o bot está conectado ao canal {nome}.")
+    except RuntimeError as e:
+        return {"erro": str(e)}
     if dados.get("ok"):
         return {"ok": True}
     return {"erro": f"Telegram recusou: {dados.get('description', '?')} "
