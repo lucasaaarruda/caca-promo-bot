@@ -47,8 +47,8 @@ class Config:
         # config.yaml
         self.intervalo_minutos: int = int(geral.get("intervalo_minutos", 45))
         self.max_posts_por_ciclo: int = int(geral.get("max_posts_por_ciclo", 0))
-        self.espacamento_segundos: int = int(geral.get("espacamento_segundos", 300))
-        self.variacao_espacamento: int = int(geral.get("variacao_espacamento", 25))  # % para mais ou para menos
+        self.espacamento_segundos: int = int(geral.get("espacamento_segundos", 270))
+        self.variacao_espacamento: int = int(geral.get("variacao_espacamento", 11))  # % para mais ou para menos
         self.nao_repetir_dias: int = int(geral.get("nao_repetir_dias", 7))
         self.link_visivel: bool = bool(geral.get("link_visivel", True))
         self.aviso_amazon: str = str(geral.get("aviso_amazon") or "").strip()

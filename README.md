@@ -95,7 +95,7 @@ Cole um link de produto no privado do bot para testar, ou espere o primeiro cicl
 Intervalo entre rodadas, ritmo dos posts, limite opcional de posts, filtros de qualidade (desconto, nota, vendas), horário ativo e relatório diário. Os **nichos** de cada canal são escolhidos na seção **Canais** do painel; as listas de `categorias`/`departamentos`/`buscas` do `config.yaml` só valem para um canal sem filtro (que posta de tudo) — há exemplos comentados dentro do arquivo. Edite e **reinicie o bot** (ele só lê a configuração ao iniciar).
 
 ### Ritmo dos posts
-Cada canal recebe um post a cada `espacamento_segundos` (padrão 300 = 5 minutos), com variação de até ±`variacao_espacamento`% (padrão 25), para não postar como um relógio. Não há limite diário: o bot posta enquanto houver oferta válida (`max_posts_por_ciclo: 0`).
+Cada canal recebe um post a cada `espacamento_segundos` (padrão 270 = 4min30s), com variação de até ±`variacao_espacamento`% (padrão 11, ou seja, de 4 a 5 minutos entre posts), para não postar como um relógio. Não há limite diário: o bot posta enquanto houver oferta válida (`max_posts_por_ciclo: 0`).
 
 ### API oficial do Mercado Livre (opcional, recomendada)
 O site do ML pede captcha para buscas e páginas de produto, e a página de "ofertas" só mostra destaques. Com um aplicativo gratuito em [developers.mercadolivre.com.br](https://developers.mercadolivre.com.br) o bot descobre também os **mais vendidos** de cada categoria do canal e produtos de catálogo por **palavra-chave**, com preço, preço original e frete, e passa a **ler título, preço e foto** dos links `/p/MLB...` colados no conversor. Preencha `ML_APP_ID` e `ML_APP_SECRET` no painel e clique em **🧪 Testar API do ML**. O link de afiliado continua sendo gerado pelo Linkbuilder.
