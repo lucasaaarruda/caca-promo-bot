@@ -212,7 +212,8 @@ def rodar():
     if not config.bot_token:
         raise SystemExit("TELEGRAM_BOT_TOKEN não configurado: preencha o token no painel ou no .env (veja o README, passo 3).")
 
-    app = Application.builder().token(config.bot_token).post_init(_avisar_online).build()
+    app = (Application.builder().token(config.bot_token).post_init(_avisar_online)
+           .connect_timeout(15).read_timeout(20).write_timeout(20).pool_timeout(15).build())
     app.add_error_handler(_erro)
     app.add_handler(CommandHandler("start", _cmd_start))
     app.add_handler(CommandHandler("id", _cmd_id))
@@ -244,4 +245,5 @@ def rodar():
             log.warning("relatorio_hora inválida no config.yaml (%r): use HH:MM", config.relatorio_hora)
 
     log.info("Bot rodando — fale com ele no privado do Telegram")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    # bootstrap_retries=-1: se a rede ainda não subiu (ex.: PC acabou de ligar), tenta de novo em vez de encerrar
+    app.run_polling(allowed_updates=Update.ALL_TYPES, bootstrap_retries=-1)

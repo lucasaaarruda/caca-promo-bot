@@ -17,6 +17,7 @@ from pathlib import Path
 
 from bs4 import BeautifulSoup
 
+from .. import rodizio
 from ..config import DATA_DIR, config
 from ..models import Oferta
 from ..utils import USER_AGENT, parse_nota, parse_preco_br, parse_vendas, sessao
@@ -58,6 +59,11 @@ def _categorias_da_rodada() -> dict[str, str]:
     por_rodada = int(config.fonte_ml.get("requisicoes_por_ciclo", 0))
     if por_rodada <= 0 or por_rodada >= len(todas):
         return dict(todas)
+    grupos = [[c for c in g.get("categorias", []) if c in dict(todas)] for g in config.fonte_ml.get("grupos") or []]
+    grupos = [g for g in grupos if g]
+    if len(grupos) > 1:  # vários canais: cada um tem a sua cota (canal pequeno é consultado toda rodada)
+        nomes = dict(todas)
+        return {c: nomes[c] for c in rodizio.escolher(grupos, por_rodada, "ml")}
     inicio = _rodizio % len(todas)
     _rodizio += por_rodada
     return dict((todas + todas)[inicio:inicio + por_rodada])

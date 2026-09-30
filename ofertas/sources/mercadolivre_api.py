@@ -20,6 +20,7 @@ from dataclasses import replace
 
 import requests
 
+from .. import rodizio
 from ..config import config
 from ..models import Oferta
 
@@ -207,9 +208,18 @@ def buscar_rodada() -> list[Oferta]:
         return []
     por_rodada = int(config.fonte_ml.get("buscas_api_por_ciclo", 6)) or len(fontes)
     if por_rodada < len(fontes):
-        inicio = _rodizio % len(fontes)
-        _rodizio += por_rodada
-        fontes = (fontes + fontes)[inicio:inicio + por_rodada]
+        grupos = []
+        for g in config.fonte_ml.get("grupos") or []:  # uma lista de fontes por canal
+            lista = ([("destaque", str(c)) for c in g.get("categorias", [])] if config.fonte_ml.get("destaques_api", True) else [])
+            lista += [("busca", str(t)) for t in g.get("buscas", [])]
+            if lista:
+                grupos.append(lista)
+        if len(grupos) > 1:
+            fontes = rodizio.escolher(grupos, por_rodada, "api")
+        else:
+            inicio = _rodizio % len(fontes)
+            _rodizio += por_rodada
+            fontes = (fontes + fontes)[inicio:inicio + por_rodada]
     teto_novos = int(config.fonte_ml.get("produtos_por_rodada", 30))
 
     achadas: dict[str, Oferta] = {}

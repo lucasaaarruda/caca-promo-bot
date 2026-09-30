@@ -82,7 +82,12 @@ class Config:
                 chaves = list(dict.fromkeys(k for c in self.canais for k in c.nichos))
                 palavras = list(dict.fromkeys(p for c in self.canais for p in c.palavras))
                 exp = expandir(chaves)
-                self.fonte_ml = {**self.fonte_ml, "categorias": exp["ml"],
+                # um grupo por canal: o rodízio dá a cada canal a sua cota por rodada (canal pequeno não espera o grande)
+                grupos = []
+                for c in self.canais:
+                    ec = expandir(c.nichos) if c.nichos else {"ml": {}, "ml_buscas": []}
+                    grupos.append({"categorias": list(ec["ml"]), "buscas": list(dict.fromkeys(ec["ml_buscas"] + c.palavras))})
+                self.fonte_ml = {**self.fonte_ml, "categorias": exp["ml"], "grupos": grupos,
                                  "buscas_api": list(dict.fromkeys(exp["ml_buscas"] + palavras))}
                 self.fonte_amazon = {**self.fonte_amazon, "departamentos": exp["amazon_dep"],
                                      "buscas": list(dict.fromkeys(exp["amazon_buscas"] + palavras))}

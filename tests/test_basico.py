@@ -799,5 +799,36 @@ class PainelTelegram(unittest.TestCase):
         self.assertIn("Telegram Web", r["erro"])
 
 
+class RodizioJustoEntreCanais(unittest.TestCase):
+    def test_repartir_da_o_que_sobra_do_pequeno_ao_grande(self):
+        from ofertas.rodizio import repartir
+        self.assertEqual(repartir([30, 1], 12), [11, 1])
+        self.assertEqual(repartir([30, 30], 12), [6, 6])
+        self.assertEqual(repartir([3, 2], 12), [3, 2])          # cabe tudo: cada um consulta tudo
+        self.assertEqual(repartir([30, 1, 1], 12), [10, 1, 1])
+
+    def test_canal_pequeno_e_consultado_toda_rodada_e_o_grande_da_a_volta(self):
+        from ofertas import rodizio
+        rodizio._indices.clear()
+        grande = [f"A{i}" for i in range(30)]
+        pequeno = ["AC1"]
+        rodadas = [rodizio.escolher([grande, pequeno], 12, "t") for _ in range(3)]
+        self.assertTrue(all("AC1" in r for r in rodadas))                    # ar condicionado: toda rodada
+        self.assertTrue(all(len(r) == 12 for r in rodadas))
+        cobertas = {x for r in rodadas for x in r if x != "AC1"}
+        self.assertEqual(len(cobertas), 30)                                  # em 3 rodadas o grande cobriu todas as 30
+
+    def test_ml_usa_a_cota_por_canal(self):
+        from ofertas import rodizio
+        from ofertas.sources import mercadolivre as ml
+        rodizio._indices.clear()
+        cats = {f"MLB{i}": f"c{i}" for i in range(1, 32)}     # 30 do automotivo + a 31ª, do ar condicionado
+        grupos = [{"categorias": [f"MLB{i}" for i in range(1, 31)]}, {"categorias": ["MLB31"]}]
+        with mock.patch.object(config, "fonte_ml", {"categorias": cats, "grupos": grupos, "requisicoes_por_ciclo": 12}):
+            primeira = ml._categorias_da_rodada()
+        self.assertIn("MLB31", primeira)      # antes só entrava na 3ª rodada
+        self.assertEqual(len(primeira), 12)
+
+
 if __name__ == "__main__":
     unittest.main()
