@@ -744,5 +744,23 @@ class ApiNaoConfiaNaCategoriaDosMaisVendidos(unittest.TestCase):
         self.assertEqual(ids, ["MLB2"])
 
 
+class ErrosDoTelegram(unittest.TestCase):
+    def test_queda_de_rede_vira_uma_linha_e_erro_de_verdade_mantem_o_detalhe(self):
+        import asyncio
+        from telegram.error import NetworkError
+        from ofertas import bot_interativo as bi
+
+        class Ctx:
+            def __init__(self, erro):
+                self.error = erro
+        with self.assertLogs("ofertas.bot", level="WARNING") as cap:
+            asyncio.run(bi._erro(None, Ctx(NetworkError("httpx.ConnectError: "))))
+        self.assertEqual(len(cap.records), 1)
+        self.assertIsNone(cap.records[0].exc_info)              # sem tela de traceback
+        with self.assertLogs("ofertas.bot", level="ERROR") as cap:
+            asyncio.run(bi._erro(None, Ctx(ValueError("bug de verdade"))))
+        self.assertIsNotNone(cap.records[0].exc_info)           # bug real continua com o detalhe
+
+
 if __name__ == "__main__":
     unittest.main()

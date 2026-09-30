@@ -7,6 +7,7 @@ import secrets
 import time
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.error import NetworkError, TimedOut
 from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
                           ContextTypes, MessageHandler, filters)
 
@@ -198,11 +199,21 @@ async def _avisar_online(app: Application) -> None:
     await pipeline.avisar_dono(app.bot, f"🟢 Bot online. Canais: {nomes}", repetir_apos_h=0)
 
 
+async def _erro(update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Queda de rede com o Telegram é passageira (o bot tenta de novo sozinho): uma linha basta.
+    Qualquer outro erro continua com o detalhe completo."""
+    if isinstance(ctx.error, (NetworkError, TimedOut)):
+        log.warning("Rede instável com o Telegram (%s); o bot tenta de novo sozinho", ctx.error)
+    else:
+        log.error("Erro inesperado no bot", exc_info=ctx.error)
+
+
 def rodar():
     if not config.bot_token:
         raise SystemExit("TELEGRAM_BOT_TOKEN não configurado: preencha o token no painel ou no .env (veja o README, passo 3).")
 
     app = Application.builder().token(config.bot_token).post_init(_avisar_online).build()
+    app.add_error_handler(_erro)
     app.add_handler(CommandHandler("start", _cmd_start))
     app.add_handler(CommandHandler("id", _cmd_id))
     app.add_handler(CommandHandler("status", _cmd_status))
