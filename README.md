@@ -98,7 +98,9 @@ Intervalo entre rodadas, ritmo dos posts, limite opcional de posts, filtros de q
 Cada canal recebe um post a cada `espacamento_segundos` (padrão 300 = 5 minutos), com variação de até ±`variacao_espacamento`% (padrão 25), para não postar como um relógio. Não há limite diário: o bot posta enquanto houver oferta válida (`max_posts_por_ciclo: 0`).
 
 ### API oficial do Mercado Livre (opcional, recomendada)
-O site do ML pede captcha para buscas e páginas de produto. Com um aplicativo gratuito em [developers.mercadolivre.com.br](https://developers.mercadolivre.com.br) o bot passa a **buscar por palavra-chave** (produtos de catálogo comum, sem estar em "ofertas") e a **ler título, preço e foto** dos links colados no conversor. Preencha `ML_APP_ID` e `ML_APP_SECRET` no painel e clique em **🧪 Testar API do ML**: ele mostra o que o ML liberou para o seu app. O link de afiliado continua sendo gerado pelo Linkbuilder.
+O site do ML pede captcha para buscas e páginas de produto, e a página de "ofertas" só mostra destaques. Com um aplicativo gratuito em [developers.mercadolivre.com.br](https://developers.mercadolivre.com.br) o bot descobre também os **mais vendidos** de cada categoria do canal e produtos de catálogo por **palavra-chave**, com preço, preço original e frete, e passa a **ler título, preço e foto** dos links `/p/MLB...` colados no conversor. Preencha `ML_APP_ID` e `ML_APP_SECRET` no painel e clique em **🧪 Testar API do ML**. O link de afiliado continua sendo gerado pelo Linkbuilder.
+
+O ML libera para apps novos `/products/search`, `/highlights` e `/products/{id}/items`; nega `/sites/MLB/search` e `/items/{id}` (HTTP 403). Produtos sem vendedor ativo são ignorados. A opção **"Aceitar produtos sem desconto"** do canal deixa passar também os mais vendidos sem desconto listado.
 
 ## Deixar rodando sozinho
 No painel, cartão **🚀 Execução automática** → **Iniciar junto com o Windows**. Isso cria uma tarefa do

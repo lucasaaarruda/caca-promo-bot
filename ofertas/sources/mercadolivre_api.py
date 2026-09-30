@@ -1,15 +1,22 @@
 """Mercado Livre pela API OFICIAL (opcional).
 
 Precisa de um aplicativo gratuito em https://developers.mercadolivre.com.br (App ID + Secret, no .env).
-Com ele o bot passa a: (1) buscar produtos por palavra-chave, coisa que o site bloqueia sem captcha,
-(2) ler título, preço e foto de um link colado no conversor. O link de afiliado continua sendo gerado
-pelo Linkbuilder (navegador logado), como antes.
+O ML libera para apps novos estas rotas (verificado em 2026-09-29), e nega as de anúncios avulsos:
 
+  ✅ /highlights/MLB/category/{cat}   os MAIS VENDIDOS de cada categoria
+  ✅ /products/search                 busca de produtos de catálogo por palavra-chave
+  ✅ /products/{id}                   nome, fotos e página de catálogo
+  ✅ /products/{id}/items             as ofertas do produto: preço, preço original, frete, etiquetas
+  ❌ /sites/MLB/search, /items/{id}   403
+
+Com elas o bot descobre produtos que a página de "ofertas" não mostra e lê título/preço/foto de links
+colados no conversor. O link de afiliado continua sendo gerado pelo Linkbuilder (navegador logado).
 Sem as credenciais, tudo aqui fica desligado e o bot funciona como sempre.
 """
 import logging
 import re
 import time
+from dataclasses import replace
 
 import requests
 
@@ -19,7 +26,10 @@ from ..models import Oferta
 log = logging.getLogger("ofertas.mlapi")
 
 API = "https://api.mercadolibre.com"
+TTL = 2 * 3600            # reaproveita o que já consultou por 2h (preço é reconferido depois disso)
+PAUSA = 0.3               # entre chamadas
 _token = {"valor": None, "expira": 0.0}
+_cache: dict[str, tuple[float, Oferta | None]] = {}   # id do produto -> (quando, oferta ou None se sem vendedor)
 _rodizio = 0
 
 _RE_ID = re.compile(r"MLB-?(\d{6,})")
@@ -52,6 +62,16 @@ def _get(caminho: str, **params) -> dict:
     return r.json()
 
 
+def _get_ou_none(caminho: str, **params) -> dict | None:
+    """Como _get, mas 404 (ex.: "No winners found", produto sem vendedor) vira None."""
+    try:
+        return _get(caminho, **params)
+    except RuntimeError as e:
+        if "HTTP 404" in str(e):
+            return None
+        raise
+
+
 # ── conversão de respostas em Oferta ─────────────────────────────────
 
 def _br(valor: float) -> str:
@@ -66,7 +86,7 @@ def _imagem_grande(url: str | None) -> str | None:
 
 
 def oferta_de_item(d: dict) -> Oferta | None:
-    """Resposta de /items/{id} ou de um resultado de /sites/MLB/search."""
+    """Anúncio no formato de /items/{id} (mantido: útil se o ML liberar essa rota no futuro)."""
     id_ = d.get("id")
     titulo = d.get("title") or d.get("name")
     preco = d.get("price")
@@ -99,103 +119,177 @@ def oferta_de_item(d: dict) -> Oferta | None:
     )
 
 
-def oferta_de_produto_catalogo(d: dict) -> Oferta | None:
-    """Resposta de /products/{id} (página de catálogo, as URLs ".../p/MLB123")."""
-    vencedor = d.get("buy_box_winner") or {}
-    preco = vencedor.get("price")
-    titulo = d.get("name")
-    if not (d.get("id") and titulo and preco):
+def _melhor_oferta(itens: dict | None) -> dict | None:
+    """Das ofertas de /products/{id}/items, a de menor preço entre as novas."""
+    validas = [i for i in (itens or {}).get("results") or []
+               if isinstance(i, dict) and i.get("price") and i.get("condition", "new") == "new"]
+    return min(validas, key=lambda i: float(i["price"])) if validas else None
+
+
+def oferta_de_catalogo(prod: dict, item: dict, categoria: str | None = None, campeao: bool = False) -> Oferta | None:
+    """Produto de catálogo (/products/{id}) + a melhor oferta dele (/products/{id}/items)."""
+    nome, id_ = prod.get("name"), prod.get("id")
+    if not (nome and id_ and item and item.get("price")):
         return None
-    fotos = d.get("pictures") or []
-    original = vencedor.get("original_price")
+    preco = float(item["price"])
+    original = item.get("original_price")
+    fotos = prod.get("pictures") or []
+
+    partes = []
+    if campeao:
+        partes.append("🏆 Mais vendido na categoria")
+    tags = item.get("tags") or []
+    if "lightning_deal" in tags:
+        partes.append("⚡ Oferta relâmpago")
+    elif "deal_of_the_day" in tags:
+        partes.append("🔥 Oferta do dia")
+    if (item.get("shipping") or {}).get("free_shipping"):
+        partes.append("🚚 Frete grátis")
+    if item.get("official_store_id"):
+        partes.append("🏪 Loja oficial")
+
     return Oferta(
         plataforma="mercadolivre",
-        id_produto=str(d["id"]).replace("-", ""),
-        titulo=titulo,
-        url_afiliado="",
-        url_produto=f"https://www.mercadolivre.com.br/p/{d['id']}",
-        preco=float(preco),
-        preco_original=float(original) if original and float(original) > float(preco) else None,
+        id_produto=str(id_).replace("-", ""),
+        titulo=nome,
+        url_afiliado="",  # preenchido pelo Linkbuilder, depois
+        url_produto=f"https://www.mercadolivre.com.br/p/{id_}",
+        preco=preco,
+        preco_original=float(original) if original and float(original) > preco else None,
         imagem=(fotos[0].get("url") if fotos else None),
-        categoria=d.get("main_category") or d.get("category_id"),
+        extra=" · ".join(partes) or None,
+        categoria=categoria or item.get("category_id"),
+        mais_vendido=campeao,
     )
 
 
-# ── o que o bot usa ──────────────────────────────────────────────────
+# ── descoberta e consulta ────────────────────────────────────────────
 
-def buscar(termo: str, limite: int = 20) -> list[Oferta]:
-    dados = _get("/sites/MLB/search", q=termo, limit=limite, condition="new")
-    return [o for o in (oferta_de_item(r) for r in dados.get("results") or []) if o]
+def produto_para_oferta(pid: str, categoria: str | None = None, campeao: bool = False) -> Oferta | None:
+    """Oferta atual de um produto de catálogo, ou None (sem vendedor ativo, inativo...). Usa cache de 2h."""
+    agora = time.time()
+    acerto = _cache.get(pid)
+    if acerto and agora - acerto[0] < TTL:
+        o = acerto[1]
+        return replace(o, categoria=categoria or o.categoria, mais_vendido=campeao or o.mais_vendido) if o else None
+    oferta = None
+    prod = _get_ou_none(f"/products/{pid}")
+    if prod and prod.get("status", "active") == "active":
+        time.sleep(PAUSA)
+        item = _melhor_oferta(_get_ou_none(f"/products/{pid}/items"))
+        oferta = oferta_de_catalogo(prod, item, categoria, campeao) if item else None
+    _cache[pid] = (agora, oferta)
+    return oferta
+
+
+def destaques(categoria: str, limite: int = 12) -> list[str]:
+    """Ids dos produtos mais vendidos da categoria (só os de catálogo; anúncios avulsos o ML nega)."""
+    conteudo = _get(f"/highlights/MLB/category/{categoria}").get("content") or []
+    return [c["id"] for c in conteudo if c.get("type") == "PRODUCT"][:limite]
+
+
+def buscar_produtos(termo: str, limite: int = 8) -> list[str]:
+    dados = _get("/products/search", status="active", site_id="MLB", q=termo, limit=limite)
+    return [r["id"] for r in dados.get("results") or [] if r.get("id")][:limite]
 
 
 def buscar_rodada() -> list[Oferta]:
-    """Palavras-chave da fonte (fontes.mercadolivre.buscas_api) em rodízio, poucas por rodada."""
+    """Descobre produtos em rodízio: mais vendidos das categorias do canal + palavras-chave.
+
+    fontes.mercadolivre.buscas_api_por_ciclo = quantas fontes por rodada (padrão 6);
+    fontes.mercadolivre.produtos_por_rodada = teto de produtos NOVOS consultados por rodada (padrão 30)."""
     global _rodizio
-    termos = [str(t) for t in (config.fonte_ml.get("buscas_api") or [])]
-    if not termos:
+    fontes: list[tuple[str, str]] = []
+    if config.fonte_ml.get("destaques_api", True):
+        fontes += [("destaque", str(c)) for c in (config.fonte_ml.get("categorias") or {})]
+    fontes += [("busca", str(t)) for t in (config.fonte_ml.get("buscas_api") or [])]
+    if not fontes:
         return []
-    por_rodada = int(config.fonte_ml.get("buscas_api_por_ciclo", 6)) or len(termos)
-    if por_rodada < len(termos):
-        inicio = _rodizio % len(termos)
+    por_rodada = int(config.fonte_ml.get("buscas_api_por_ciclo", 6)) or len(fontes)
+    if por_rodada < len(fontes):
+        inicio = _rodizio % len(fontes)
         _rodizio += por_rodada
-        termos = (termos + termos)[inicio:inicio + por_rodada]
+        fontes = (fontes + fontes)[inicio:inicio + por_rodada]
+    teto_novos = int(config.fonte_ml.get("produtos_por_rodada", 30))
+
     achadas: dict[str, Oferta] = {}
-    for termo in termos:
+    consultados = 0
+    for tipo, chave in fontes:
         try:
-            for o in buscar(termo):
-                achadas.setdefault(o.id_produto, o)
+            ids = destaques(chave) if tipo == "destaque" else buscar_produtos(chave)
         except Exception as e:
-            log.error("Busca '%s' na API do ML: %s", termo, e)
+            log.error("API do ML (%s '%s'): %s", tipo, chave, e)
             if "HTTP 403" in str(e) or "HTTP 401" in str(e):
-                break  # sem permissão: não adianta insistir nos outros termos
-        time.sleep(1)
-    log.info("Mercado Livre (API): %d ofertas em %d busca(s)", len(achadas), len(termos))
+                break  # sem permissão: não adianta insistir
+            continue
+        for pid in ids:
+            if pid in achadas:
+                continue
+            novo = pid not in _cache or time.time() - _cache[pid][0] >= TTL
+            if novo and consultados >= teto_novos:
+                continue
+            try:
+                # sem passar a categoria de origem: a lista de mais vendidos traz itens fora do nicho (ex.: produto de cabelo em
+                # "Limpeza Automotiva"), então aqui o título é que precisa provar o nicho (termos), não a categoria
+                o = produto_para_oferta(pid, campeao=tipo == "destaque")
+            except Exception as e:
+                log.error("API do ML (produto %s): %s", pid, e)
+                continue
+            consultados += novo
+            if o:
+                achadas[pid] = o
+            if novo:
+                time.sleep(PAUSA)
+        time.sleep(PAUSA)
+    log.info("Mercado Livre (API): %d ofertas de %d fonte(s) (%d produtos consultados)", len(achadas), len(fontes), consultados)
     return list(achadas.values())
 
 
 def oferta_de_url(url: str) -> Oferta | None:
-    """Título, preço e foto de um link do ML (item ou página de catálogo). None se a API não conseguir."""
+    """Título, preço e foto de um link ".../p/MLB123" (catálogo). Links de anúncio avulso o ML nega."""
     m = _RE_ID.search(url)
     if not (disponivel() and m):
         return None
-    id_ = f"MLB{m.group(1)}"
-    for caminho, conv in ((f"/items/{id_}", oferta_de_item), (f"/products/{id_}", oferta_de_produto_catalogo)):
-        try:
-            oferta = conv(_get(caminho))
-            if oferta:
-                return oferta
-        except Exception as e:
-            log.info("API do ML %s: %s", caminho, e)
-    return None
+    try:
+        return produto_para_oferta(f"MLB{m.group(1)}")
+    except Exception as e:
+        log.info("API do ML (link %s): %s", url[:60], e)
+        return None
 
 
 def diagnostico() -> list[str]:
-    """Roda os 3 usos da API e diz o que o ML liberou para o seu aplicativo."""
+    """Roda os usos da API e diz o que o ML liberou para o seu aplicativo."""
     if not disponivel():
         return ["❌ Preencha ML_APP_ID e ML_APP_SECRET (painel → Mercado Livre) e salve."]
-    linhas = []
     try:
         _access_token()
-        linhas.append("✅ Token: o ML aceitou o seu App ID e Secret.")
     except Exception as e:
         return [f"❌ Token: {e}"]
-    item_id = None
+    linhas = ["✅ Token: o ML aceitou o seu App ID e Secret."]
     try:
-        achadas = buscar("boina de polimento", limite=5)
-        linhas.append(f"✅ Busca por palavra-chave: {len(achadas)} resultado(s)" +
-                      (f", ex.: {achadas[0].titulo[:60]} — R$ {achadas[0].preco}" if achadas else ""))
-        item_id = achadas[0].id_produto if achadas else None
+        ids = buscar_produtos("boina de polimento", 5)
+        linhas.append(f"✅ Busca por palavra-chave (catálogo): {len(ids)} produto(s)")
     except Exception as e:
-        linhas.append(f"❌ Busca por palavra-chave: {e}")
-    if item_id:
-        try:
-            o = oferta_de_item(_get(f"/items/{item_id}"))
-            linhas.append(f"✅ Leitura de anúncio: {o.titulo[:60]} — R$ {o.preco}" if o else "⚠️ Leitura de anúncio: resposta sem preço")
-        except Exception as e:
-            linhas.append(f"❌ Leitura de anúncio: {e}")
+        linhas.append(f"❌ Busca por palavra-chave (catálogo): {e}")
     try:
-        o = oferta_de_produto_catalogo(_get("/products/MLB75836344"))
-        linhas.append(f"✅ Leitura de página de catálogo: {o.titulo[:60]} — R$ {o.preco}" if o else "⚠️ Catálogo: resposta sem preço")
+        ids = destaques("MLB188063", 10)
+        linhas.append(f"✅ Mais vendidos da categoria Limpeza Automotiva: {len(ids)} produto(s)")
+        achou = None
+        for pid in ids:
+            achou = produto_para_oferta(pid)
+            if achou:
+                break
+        if achou:
+            linhas.append(f"✅ Preço de um produto: {achou.titulo[:55]} — R$ {achou.preco}"
+                          + (f" (de R$ {achou.preco_original})" if achou.preco_original else ""))
+        else:
+            linhas.append("⚠️ Preço: nenhum dos destaques testados tinha vendedor ativo agora")
     except Exception as e:
-        linhas.append(f"❌ Leitura de página de catálogo: {e}")
+        linhas.append(f"❌ Mais vendidos / preço: {e}")
+    try:
+        o = produto_para_oferta("MLB75836344")
+        linhas.append(f"✅ Leitura de link de catálogo: {o.titulo[:55]} — R$ {o.preco}" if o else
+                      "⚠️ Leitura de link de catálogo: produto sem vendedor ativo agora")
+    except Exception as e:
+        linhas.append(f"❌ Leitura de link de catálogo: {e}")
     return linhas

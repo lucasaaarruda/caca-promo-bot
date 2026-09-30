@@ -47,7 +47,7 @@ def coletar() -> list[Oferta]:
                 todas += mercadolivre.buscar_ofertas()
             except Exception as e:
                 log.error("Mercado Livre: %s", e)
-            if mercadolivre_api.disponivel() and config.fonte_ml.get("buscas_api"):
+            if mercadolivre_api.disponivel():
                 try:
                     todas += mercadolivre_api.buscar_rodada()
                 except Exception as e:
@@ -107,7 +107,7 @@ def filtrar(ofertas: list[Oferta], canal: Canal | None = None) -> list[Oferta]:
 
 def _muito_vendido(o: Oferta) -> bool:
     """Para canais que aceitam produto sem desconto listado: só os campeões de venda e bem avaliados."""
-    return (o.nota is None or o.nota >= 4.5) and (o.vendas or 0) >= 500
+    return o.mais_vendido or ((o.nota is None or o.nota >= 4.5) and (o.vendas or 0) >= 500)
 
 
 def _chave_similar(titulo: str) -> str:

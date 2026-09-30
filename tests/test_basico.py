@@ -627,13 +627,44 @@ class ApiOficialDoML(unittest.TestCase):
         self.assertNotIn("sem juros", o.extra)
         self.assertIsNone(o.preco_original)
 
-    def test_pagina_de_catalogo(self):
-        from ofertas.sources.mercadolivre_api import oferta_de_produto_catalogo
-        o = oferta_de_produto_catalogo({"id": "MLB75836344", "name": "Auxiliar de Partida 6 em 1",
-                                        "pictures": [{"url": "https://img/a.jpg"}],
-                                        "buy_box_winner": {"price": 148.45, "original_price": 300.0}})
-        self.assertEqual((o.titulo, o.preco, o.preco_original, o.imagem), ("Auxiliar de Partida 6 em 1", 148.45, 300.0, "https://img/a.jpg"))
+    def test_produto_de_catalogo_usa_a_oferta_de_menor_preco_entre_as_novas(self):
+        from ofertas.sources import mercadolivre_api as api
+        prod = {"id": "MLB75836344", "name": "Auxiliar de Partida 6 em 1", "status": "active", "pictures": [{"url": "https://img/a.jpg"}]}
+        itens = {"results": [
+            {"item_id": "A", "price": 161.36, "original_price": 300, "condition": "new", "tags": ["lightning_deal"],
+             "shipping": {"free_shipping": True}, "category_id": "MLB63455"},
+            {"item_id": "B", "price": 199.0, "condition": "new"},
+            {"item_id": "C", "price": 90.0, "condition": "used"}]}       # usado não conta
+        chamadas = []
+
+        def falso(caminho, **k):
+            chamadas.append(caminho)
+            return prod if caminho.endswith("MLB75836344") else itens
+        api._cache.clear()
+        with mock.patch.object(api, "_get_ou_none", side_effect=falso), mock.patch.object(api.time, "sleep"):
+            o = api.produto_para_oferta("MLB75836344")
+            api.produto_para_oferta("MLB75836344")       # 2ª vez: vem do cache, sem chamar o ML de novo
+        self.assertEqual((o.titulo, o.preco, o.preco_original, o.desconto, o.imagem),
+                         ("Auxiliar de Partida 6 em 1", 161.36, 300.0, 46, "https://img/a.jpg"))
         self.assertEqual(o.url_produto, "https://www.mercadolivre.com.br/p/MLB75836344")
+        self.assertIn("⚡ Oferta relâmpago", o.extra)
+        self.assertIn("🚚 Frete grátis", o.extra)
+        self.assertEqual(o.categoria, "MLB63455")
+        self.assertEqual(len(chamadas), 2)
+
+    def test_produto_sem_vendedor_vira_none_e_e_lembrado(self):
+        from ofertas.sources import mercadolivre_api as api
+        prod = {"id": "MLB44355993", "name": "Lâmpada LED 6w", "status": "active", "pictures": []}
+        chamadas = []
+
+        def falso(caminho, **k):
+            chamadas.append(caminho)
+            return prod if not caminho.endswith("/items") else None      # 404 "No winners found"
+        api._cache.clear()
+        with mock.patch.object(api, "_get_ou_none", side_effect=falso), mock.patch.object(api.time, "sleep"):
+            self.assertIsNone(api.produto_para_oferta("MLB44355993"))
+            self.assertIsNone(api.produto_para_oferta("MLB44355993"))
+        self.assertEqual(len(chamadas), 2)   # não insiste no que já sabe que não tem vendedor
 
     def test_sem_credenciais_fica_desligada(self):
         from ofertas.sources import mercadolivre_api as api
@@ -642,19 +673,23 @@ class ApiOficialDoML(unittest.TestCase):
             self.assertIsNone(api.oferta_de_url("https://www.mercadolivre.com.br/p/MLB75836344"))
             self.assertIn("Preencha ML_APP_ID", api.diagnostico()[0])
 
-    def test_busca_em_rodizio_e_para_se_o_ml_negar_acesso(self):
+    def test_rodada_junta_mais_vendidos_e_palavras_chave_e_para_no_403(self):
+        from ofertas.models import Oferta as O
         from ofertas.sources import mercadolivre_api as api
-        chamadas = []
+        chamados = []
 
-        def busca(termo, limite=20):
-            chamadas.append(termo)
-            if termo == "b":
-                raise RuntimeError("API do ML /sites/MLB/search respondeu HTTP 403: PolicyAgent")
-            return []
+        def produto(pid, categoria=None, campeao=False):
+            chamados.append((pid, categoria, campeao))
+            return O("mercadolivre", pid, f"Produto {pid}", "", preco=10)
         api._rodizio = 0
-        with mock.patch.object(config, "fonte_ml", {"buscas_api": ["a", "b", "c", "d"], "buscas_api_por_ciclo": 3}),              mock.patch.object(api, "buscar", side_effect=busca), mock.patch.object(api.time, "sleep"):
-            api.buscar_rodada()
-        self.assertEqual(chamadas, ["a", "b"])   # 403 em "b": não insiste em "c"
+        api._cache.clear()
+        cfg = {"categorias": {"MLB188063": "Limpeza"}, "buscas_api": ["boina"], "buscas_api_por_ciclo": 5}
+        with mock.patch.object(config, "fonte_ml", cfg), mock.patch.object(api, "destaques", return_value=["P1", "P2"]), \
+             mock.patch.object(api, "buscar_produtos", side_effect=RuntimeError("API do ML /products/search respondeu HTTP 403")), \
+             mock.patch.object(api, "produto_para_oferta", side_effect=produto), mock.patch.object(api.time, "sleep"):
+            ofertas = api.buscar_rodada()
+        self.assertEqual([o.id_produto for o in ofertas], ["P1", "P2"])
+        self.assertEqual(chamados, [("P1", None, True), ("P2", None, True)])   # campeões da categoria; sem "categoria confiável"
 
     def test_conversor_usa_a_api_quando_a_pagina_pede_captcha(self):
         from ofertas.models import Oferta as O
@@ -689,8 +724,24 @@ class SemDescontoListado(unittest.TestCase):
         padrao = Canal(id="p", nome="P", chat_id="-2")
         with mock.patch.object(config, "desconto_minimo", 25), mock.patch.object(config, "vendas_minimas", 30),              mock.patch.object(pipeline.db, "_DB", pathlib.Path(tempfile.mkdtemp()) / "sd.db"):
             ids = lambda canal: [o.id_produto for o in pipeline.filtrar([campeao, fraco, com_desconto_baixo], canal)]
+            mais_vendido = oferta(id_="topo", preco=26, original=None)
+            mais_vendido.mais_vendido = True                                  # sem dados de venda, mas é o nº 1 da categoria
+            self.assertEqual([o.id_produto for o in pipeline.filtrar([mais_vendido], aceita)], ["topo"])
             self.assertEqual(ids(aceita), ["campeao"])
             self.assertEqual(ids(padrao), [])
+
+
+class ApiNaoConfiaNaCategoriaDosMaisVendidos(unittest.TestCase):
+    def test_produto_de_cabelo_entre_os_mais_vendidos_de_limpeza_automotiva_e_barrado(self):
+        from ofertas.canais import Canal
+        canal = Canal(id="auto-teste", nome="A", chat_id="-1", nichos=["automotivo"], aceitar_sem_desconto=True)
+        fora = Oferta("mercadolivre", "MLB1", "Truss Uso Obrigatório Tratamento Reconstrutor 260ml", "", preco=61.9,
+                      preco_original=98.0, categoria="MLB269712", mais_vendido=True)
+        dentro = Oferta("mercadolivre", "MLB2", "Boina Lã Pirulito Corte Pesado Polimento Lincoln 5 Pol", "", preco=48.0,
+                        preco_original=69.0, categoria="MLB433258", mais_vendido=True)
+        with mock.patch.object(pipeline.db, "_DB", pathlib.Path(tempfile.mkdtemp()) / "c.db"), mock.patch.object(config, "desconto_minimo", 25):
+            ids = [o.id_produto for o in pipeline.filtrar([fora, dentro], canal)]
+        self.assertEqual(ids, ["MLB2"])
 
 
 if __name__ == "__main__":

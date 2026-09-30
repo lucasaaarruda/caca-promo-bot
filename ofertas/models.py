@@ -16,6 +16,7 @@ class Oferta:
     nota: float | None = None  # avaliação média (0-5), quando a fonte informa
     vendas: int | None = None  # unidades vendidas, quando a fonte informa
     cupom: str | None = None   # código de cupom a digitar (informado por você no conversor)
+    mais_vendido: bool = False # veio da lista de mais vendidos da categoria (API do ML)
     categoria: str | None = None  # categoria de origem no ML (id), quando a fonte informa
 
     @property
