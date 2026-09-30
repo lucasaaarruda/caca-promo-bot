@@ -409,5 +409,41 @@ class AuditoriaCorrecoes(unittest.TestCase):
             self.assertEqual([p for _, p in db.historico_preco(o.uid)], [100.0, 90.0])
 
 
+class PostaEnquantoHouverOferta(unittest.TestCase):
+    def _rodar(self, ofertas, limite=0, prazo_estourado=False):
+        import asyncio
+        from ofertas.canais import Canal
+        canal = Canal(id="c", nome="C", chat_id="-1")  # sem filtro de nicho
+        bot = FakeBot()
+        prazo = (lambda: pipeline.time.monotonic() - 1) if prazo_estourado else (lambda: float("inf"))
+        with mock.patch.object(config, "canais", [canal]),              mock.patch.object(pipeline.db, "_DB", pathlib.Path(tempfile.mkdtemp()) / "l.db"),              mock.patch.object(config, "horario_ativo", ""), mock.patch.object(config, "desconto_minimo", 25),              mock.patch.object(config, "max_posts_por_ciclo", limite), mock.patch.object(config, "espacamento_segundos", 0),              mock.patch.object(pipeline, "coletar", return_value=ofertas),              mock.patch.object(pipeline, "_prazo_ciclo", side_effect=prazo),              mock.patch.object(pipeline.asyncio, "sleep", new=mock.AsyncMock()),              mock.patch.object(pipeline, "avisar_dono", new=mock.AsyncMock()):
+            n = asyncio.run(pipeline.executar_ciclo(bot))
+        return n, bot.enviados
+
+    def _ofertas(self, n):
+        nomes = ["Alfa", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf", "Hotel", "India", "Juliet", "Kilo", "Lima"]
+        return [Oferta("amazon", f"id{i}", f"{nomes[i]} produto diferente numero {i} completo", "https://x/" + str(i),
+                       preco=50, preco_original=100) for i in range(n)]
+
+    def test_sem_limite_posta_tudo_que_for_valido(self):
+        n, env = self._rodar(self._ofertas(11))
+        self.assertEqual(n, 11)                        # 11 = mais que qualquer "lote": vários lotes seguidos
+        self.assertEqual(len({t for _, t in env}), 11)  # nenhum repetido
+
+    def test_teto_opcional_ainda_funciona(self):
+        n, _ = self._rodar(self._ofertas(11), limite=4)
+        self.assertEqual(n, 4)
+
+    def test_rodada_sem_tempo_deixa_o_resto_para_a_proxima(self):
+        n, _ = self._rodar(self._ofertas(5), prazo_estourado=True)
+        self.assertEqual(n, 0)
+
+    def test_variacoes_do_mesmo_produto_nao_saem_na_mesma_rodada(self):
+        variacoes = [Oferta("amazon", f"v{i}", f"Mesmo Produto Kit Completo Especial Cor {cor}", "https://x/v", preco=50, preco_original=100)
+                     for i, cor in enumerate(["Azul", "Rosa", "Verde"])]
+        n, _ = self._rodar(variacoes + self._ofertas(2))
+        self.assertEqual(n, 3)   # 1 das 3 cores + 2 produtos diferentes
+
+
 if __name__ == "__main__":
     unittest.main()

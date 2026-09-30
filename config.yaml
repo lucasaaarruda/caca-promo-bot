@@ -1,9 +1,9 @@
 # Configuração do bot de ofertas (o que não é segredo fica aqui; segredos vão no .env)
 
 geral:
-  intervalo_minutos: 45        # de quanto em quanto tempo buscar ofertas novas
-  max_posts_por_ciclo: 3       # máximo de ofertas postadas por ciclo
-  espacamento_segundos: 120    # pausa entre um post e outro no mesmo ciclo
+  intervalo_minutos: 30        # de quanto em quanto tempo buscar ofertas novas
+  max_posts_por_ciclo: 0       # teto de posts por canal em cada rodada; 0 = sem limite (posta enquanto houver oferta válida)
+  espacamento_segundos: 120    # ritmo: a cada N segundos sai um post (dividido entre os canais ativos)
   nao_repetir_dias: 7          # não repostar o mesmo produto dentro desse prazo
   horario_ativo: "08:00-23:00" # só posta nesse intervalo (hora do PC); "" = 24h
   aviso_amazon: "Como participante do Programa de Associados da Amazon, sou remunerado pelas compras qualificadas efetuadas."

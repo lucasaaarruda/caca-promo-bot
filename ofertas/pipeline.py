@@ -148,8 +148,19 @@ def _tag_amazon(url: str, tag: str) -> str:
     return re.sub(r"([?&]tag=)[^&#]+", lambda m: m.group(1) + tag, url) if tag else url
 
 
+LOTE = 3  # ofertas por canal em cada passada (o ML gera os links do lote de uma vez só)
+
+
+def _prazo_ciclo() -> float:
+    """Até quando esta rodada pode continuar postando; o que sobrar fica para a próxima."""
+    if config.intervalo_minutos <= 0:
+        return float("inf")
+    return time.monotonic() + max(300, config.intervalo_minutos * 60 - 90)
+
+
 async def executar_ciclo(bot: Bot) -> int:
-    """Um ciclo completo: coletar (uma vez) -> por canal: filtrar e escolher -> links -> postar."""
+    """Uma rodada: coleta (uma vez) e, enquanto houver oferta válida para algum canal e tempo,
+    posta em lotes espaçados. Sem teto de posts (a menos que o config.yaml defina um)."""
     if not dentro_do_horario():
         log.info("Fora do horário ativo (%s) — ciclo pulado", config.horario_ativo)
         return 0
@@ -158,6 +169,7 @@ async def executar_ciclo(bot: Bot) -> int:
         log.warning("Nenhum canal ativo — crie um no painel (seção Canais)")
         return 0
 
+    prazo = _prazo_ciclo()
     brutas = await asyncio.to_thread(coletar)
     await asyncio.to_thread(db.registrar_precos, brutas)
     global _ciclos_vazios
@@ -166,75 +178,91 @@ async def executar_ciclo(bot: Bot) -> int:
         await avisar_dono(bot, "⚠️ 3 rodadas seguidas sem coletar nenhuma oferta "
                                "(fontes bloqueadas, fora do ar ou sem sessão?). Veja o log do bot.")
     boas = {c.id: filtrar(brutas, c) for c in canais}
+    total_boas = {c.id: len(boas[c.id]) for c in canais}
 
-    def _escolher() -> dict[str, list[Oferta]]:
-        return {c.id: escolher(boas[c.id], c.max_posts_por_ciclo or config.max_posts_por_ciclo)
-                for c in canais}
-
-    escolhidas = _escolher()
-
-    # Mercado Livre: link de afiliado só das escolhidas (o linkbuilder é caro). Cada canal pode ter a
-    # sua etiqueta, o que separa o desempenho por nicho no painel de afiliados do ML.
     def _etiqueta(c: Canal) -> str:
         return c.ml_etiqueta or config.ml_etiqueta
 
-    grupos: dict[str, dict[str, Oferta]] = {}  # etiqueta -> uid -> cópia da oferta
-    for c in canais:
-        for o in escolhidas[c.id]:
-            if o.plataforma == "mercadolivre":
-                grupos.setdefault(_etiqueta(c), {})[o.uid] = replace(o, url_afiliado="")
-    links: dict[tuple[str, str], str] = {}  # (canal_id, uid) -> link de afiliado do ML
-    if grupos:
-        try:
-            await asyncio.to_thread(mercadolivre.gerar_links_por_etiqueta,
-                                    {e: list(g.values()) for e, g in grupos.items()})
-            for c in canais:
-                for o in escolhidas[c.id]:
-                    if o.plataforma == "mercadolivre":
-                        links[(c.id, o.uid)] = grupos[_etiqueta(c)][o.uid].url_afiliado
-        except Exception as e:
-            log.error("Linkbuilder ML falhou: %s", e)
-            db.registrar_evento("ml_sessao" if "Sessão" in str(e) else "ml_link_falhou", str(e))
-            if "Sessão" in str(e):
-                await avisar_dono(bot, f"⚠️ Mercado Livre parou de gerar links: {e}")
-            # sem link não há post: tira o ML do páreo e escolhe de novo, para não desperdiçar vagas
-            for c in canais:
-                boas[c.id] = [o for o in boas[c.id] if o.plataforma != "mercadolivre"]
-            escolhidas = _escolher()
-
-    # intercala os canais (1º de cada, 2º de cada...) para o feed de todos andar junto
-    fila: list[tuple[Canal, Oferta]] = []
-    for i in range(max((len(v) for v in escolhidas.values()), default=0)):
-        fila += [(c, escolhidas[c.id][i]) for c in canais if i < len(escolhidas[c.id])]
-
-    pausa = max(20, config.espacamento_segundos // max(1, len(canais)))
-    postadas = 0
+    limite = {c.id: c.max_posts_por_ciclo or config.max_posts_por_ciclo for c in canais}  # 0 = sem limite
     por_canal = {c.id: 0 for c in canais}
-    for n, (c, o) in enumerate(fila):
-        link = links.get((c.id, o.uid)) or o.url_afiliado
-        if o.plataforma == "amazon":
-            link = _tag_amazon(link, c.amazon_tag)
-        if not link:
-            log.warning("Sem link de afiliado, pulando: %s", o.titulo[:60])
-            continue
-        chave = f"{c.id}|{o.uid}"
-        db.registrar(o, c.id)  # antes de postar: se o processo cair no meio, não reposta
-        try:
-            await postar_oferta(bot, replace(o, url_afiliado=link), c.chat_id)
-        except Exception as e:
-            log.error("Falha ao postar '%s' em %s: %s", o.titulo[:60], c.nome, e)
-            db.esquecer(chave)
-            db.registrar_evento("falha_post", f"{c.id}: {e}")
-            await avisar_dono(bot, f"⚠️ Não consegui postar no canal {c.rotulo}: {e}\n"
-                                   "Confira se o bot é administrador do canal e se o ID está certo.")
-            continue
-        postadas += 1
-        por_canal[c.id] += 1
-        if n < len(fila) - 1:
-            await asyncio.sleep(pausa)
+    chaves_postadas: dict[str, set[str]] = {c.id: set() for c in canais}  # variações já postadas nesta rodada
+    ml_ok = True
+    postadas = 0
+    pausa = max(20, config.espacamento_segundos // max(1, len(canais)))
 
+    while time.monotonic() < prazo:
+        # próximo lote de cada canal (respeitando o teto opcional)
+        lote: dict[str, list[Oferta]] = {}
+        for c in canais:
+            boas[c.id] = [o for o in boas[c.id] if _chave_similar(o.titulo) not in chaves_postadas[c.id]
+                          and (ml_ok or o.plataforma != "mercadolivre")]
+            n = LOTE if not limite[c.id] else min(LOTE, limite[c.id] - por_canal[c.id])
+            lote[c.id] = escolher(boas[c.id], n) if n > 0 else []
+        if not any(lote.values()):
+            break
+
+        # Mercado Livre: link de afiliado só do lote (o linkbuilder é caro). Cada canal pode ter a sua
+        # etiqueta, o que separa o desempenho por nicho no painel de afiliados do ML.
+        grupos: dict[str, dict[str, Oferta]] = {}  # etiqueta -> uid -> cópia da oferta
+        for c in canais:
+            for o in lote[c.id]:
+                if o.plataforma == "mercadolivre":
+                    grupos.setdefault(_etiqueta(c), {})[o.uid] = replace(o, url_afiliado="")
+        links: dict[tuple[str, str], str] = {}  # (canal_id, uid) -> link de afiliado do ML
+        if grupos:
+            try:
+                await asyncio.to_thread(mercadolivre.gerar_links_por_etiqueta,
+                                        {e: list(g.values()) for e, g in grupos.items()})
+                for c in canais:
+                    for o in lote[c.id]:
+                        if o.plataforma == "mercadolivre":
+                            links[(c.id, o.uid)] = grupos[_etiqueta(c)][o.uid].url_afiliado
+            except Exception as e:
+                log.error("Linkbuilder ML falhou: %s", e)
+                db.registrar_evento("ml_sessao" if "Sessão" in str(e) else "ml_link_falhou", str(e))
+                if "Sessão" in str(e):
+                    await avisar_dono(bot, f"⚠️ Mercado Livre parou de gerar links: {e}")
+                ml_ok = False  # sem link não há post: tira o ML do páreo e escolhe de novo
+                continue
+
+        # intercala os canais (1º de cada, 2º de cada...) para o feed de todos andar junto
+        fila: list[tuple[Canal, Oferta]] = []
+        for i in range(max(len(v) for v in lote.values())):
+            fila += [(c, lote[c.id][i]) for c in canais if i < len(lote[c.id])]
+
+        for c, o in fila:
+            # tira da lista de candidatos de qualquer jeito, para a rodada nunca ficar presa numa oferta
+            boas[c.id] = [x for x in boas[c.id] if x.uid != o.uid]
+            if time.monotonic() >= prazo:
+                break
+            link = links.get((c.id, o.uid)) or o.url_afiliado
+            if o.plataforma == "amazon":
+                link = _tag_amazon(link, c.amazon_tag)
+            if not link:
+                log.warning("Sem link de afiliado, pulando: %s", o.titulo[:60])
+                continue
+            if postadas:
+                await asyncio.sleep(pausa)  # ritmo entre posts: não despeja tudo de uma vez
+            chave = f"{c.id}|{o.uid}"
+            db.registrar(o, c.id)  # antes de postar: se o processo cair no meio, não reposta
+            try:
+                await postar_oferta(bot, replace(o, url_afiliado=link), c.chat_id)
+            except Exception as e:
+                log.error("Falha ao postar '%s' em %s: %s", o.titulo[:60], c.nome, e)
+                db.esquecer(chave)
+                db.registrar_evento("falha_post", f"{c.id}: {e}")
+                await avisar_dono(bot, f"⚠️ Não consegui postar no canal {c.rotulo}: {e}\n"
+                                       "Confira se o bot é administrador do canal e se o ID está certo.")
+                continue
+            postadas += 1
+            por_canal[c.id] += 1
+            chaves_postadas[c.id].add(_chave_similar(o.titulo))
+
+    sobrou = {c.id: len(boas[c.id]) for c in canais}
     db.registrar_ciclo(len(brutas), postadas,
-                       {c.id: {"boas": len(boas[c.id]), "postadas": por_canal[c.id]} for c in canais})
-    log.info("Ciclo: %d coletadas | %s | %d postadas", len(brutas),
-             ", ".join(f"{c.nome}: {len(boas[c.id])} boas" for c in canais), postadas)
+                       {c.id: {"boas": total_boas[c.id], "postadas": por_canal[c.id]} for c in canais})
+    log.info("Ciclo: %d coletadas | %s | %d postadas%s", len(brutas),
+             ", ".join(f"{c.nome}: {total_boas[c.id]} boas, {por_canal[c.id]} postadas" for c in canais), postadas,
+             " | ficaram para a próxima rodada: " + ", ".join(f"{k}={v}" for k, v in sobrou.items() if v)
+             if any(sobrou.values()) and time.monotonic() >= prazo else "")
     return postadas

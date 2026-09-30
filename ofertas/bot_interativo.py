@@ -55,11 +55,11 @@ async def _cmd_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                                    ("Shopee", config.fonte_shopee),
                                    ("Amazon", config.fonte_amazon)) if f.get("ativa")]
     por_canal = "".join(f"   {c.rotulo}: {db.total_postadas(c.id)}\n" for c in config.canais)
+    teto = f"máx. {config.max_posts_por_ciclo} posts por rodada" if config.max_posts_por_ciclo else "sem limite de posts"
     await update.message.reply_text(
         f"📊 {db.total_postadas()} ofertas postadas até agora\n{por_canal}"
         f"🔎 Fontes automáticas: {', '.join(fontes) or 'nenhuma'}\n"
-        f"⏱ Ciclo a cada {config.intervalo_minutos} min, "
-        f"máx. {config.max_posts_por_ciclo} posts por ciclo\n"
+        f"⏱ Rodada a cada {config.intervalo_minutos} min, {teto}\n"
         f"🎯 Desconto mínimo: {config.desconto_minimo}%"
     )
 
