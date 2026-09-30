@@ -163,12 +163,24 @@ def cmd_testar(args):
     else:
         raise SystemExit("Fontes testáveis: ml, shopee, amazon")
     ofertas.sort(key=lambda o: o.desconto or 0, reverse=True)
-    for o in ofertas[:10]:
-        print(f"[-{o.desconto or 0:>2}%] R$ {o.preco} (de {o.preco_original}) — "
-              f"{o.titulo[:60]}")
+    from .config import config
+    from .pipeline import filtrar
+
+    # o que o bot realmente postaria: passa nos filtros de algum canal ativo (nicho, nota, vendas, desconto...)
+    destinos = {id(o): [c.rotulo for c in config.canais if filtrar([o], c)] for o in ofertas}
+    aprovadas = [o for o in ofertas if destinos[id(o)]]
+    if config.canais:
+        print(f"✅ Postaria: {len(aprovadas)} de {len(ofertas)} ofertas coletadas\n")
+    for o in (aprovadas if config.canais else ofertas)[:10]:
+        print(f"[-{o.desconto or 0:>2}%] R$ {o.preco} (de {o.preco_original}) — {o.titulo[:60]}")
         if o.extra:
             print(f"       {o.extra}")
-    print(f"\nTotal: {len(ofertas)} ofertas")
+        if config.canais:
+            print(f"       → canal: {', '.join(destinos[id(o)])}")
+    if config.canais:
+        print(f"\n⛔ Barradas pelos filtros: {len(ofertas) - len(aprovadas)} "
+              "(fora do nicho, nota ou vendas baixas, desconto fora da faixa, ou já postadas)")
+    print(f"Total coletado: {len(ofertas)} ofertas")
 
 
 def main():
