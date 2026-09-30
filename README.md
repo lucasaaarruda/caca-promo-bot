@@ -104,7 +104,7 @@ serve só para configurar: pode fechá-lo. Pela linha de comando: `python -m ofe
 - Logs em `data/logs/` (`run.log` = o bot, `servico.log` = o supervisor), com rotação automática.
 - Você recebe no privado: 🟢 bot online, ⚠️ bot caiu, ⚠️ sessão do ML expirou, ⚠️ rodadas sem nenhuma oferta.
 - Para o PC não dormir: Configurações → Sistema → Energia → *Suspender: nunca*.
-- `horario_ativo` no `config.yaml` evita posts de madrugada (padrão 08:00–23:00).
+- `horario_ativo` no `config.yaml` evita posts de madrugada (padrão 07:00–23:30).
 - Sem o início automático, o `run.bat` continua funcionando (reinicia sozinho, mas exige a janela aberta).
 
 ---

@@ -5,7 +5,7 @@ geral:
   max_posts_por_ciclo: 0       # teto de posts por canal em cada rodada; 0 = sem limite (posta enquanto houver oferta válida)
   espacamento_segundos: 120    # ritmo: a cada N segundos sai um post (dividido entre os canais ativos)
   nao_repetir_dias: 7          # não repostar o mesmo produto dentro desse prazo
-  horario_ativo: "08:00-23:00" # só posta nesse intervalo (hora do PC); "" = 24h
+  horario_ativo: "07:00-23:30" # só posta nesse intervalo (hora do PC); "" = 24h
   aviso_amazon: "Como participante do Programa de Associados da Amazon, sou remunerado pelas compras qualificadas efetuadas."
                                # frase exigida pelo contrato da Amazon; vai no fim dos posts da Amazon. "" = desliga
   relatorio_hora: "21:00"      # hora em que o bot manda o relatório do dia no seu privado; "" = desliga
