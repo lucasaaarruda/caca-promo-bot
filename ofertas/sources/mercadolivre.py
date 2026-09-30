@@ -116,6 +116,14 @@ def _parse_card(card) -> Oferta | None:
     pix = card.select_one(".poly-price__unit-description")
     if pix and "pix" in pix.get_text().lower():
         partes.append("💠 preço no Pix")
+    bloco_preco = card.select_one(".poly-component__price")
+    if bloco_preco and re.search(r"OFF\s+com\s+cupom", bloco_preco.get_text(" ", strip=True), re.I):
+        partes.append("🎟 Preço com cupom do ML (ative o cupom na página do produto)")
+    bloco_cupom = card.select_one(".poly-component__coupons")
+    if bloco_cupom:
+        m = re.search(r"(\d+\s*%|R\$\s*[\d.,]+)\s*OFF", bloco_cupom.get_text(" ", strip=True), re.I)
+        if m:
+            partes.append(f"🎟 Cupom extra: {m.group(1).replace(' ', '')} OFF")
 
     return Oferta(
         plataforma="mercadolivre",

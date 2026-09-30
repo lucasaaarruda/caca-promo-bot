@@ -453,5 +453,57 @@ class Concordancia(unittest.TestCase):
         self.assertEqual(_pl(2, "rodada", "rodadas"), "rodadas")
 
 
+class CupomLinkEArCondicionado(unittest.TestCase):
+    def test_extrai_cupom_digitado(self):
+        from ofertas.utils import extrair_cupom
+        self.assertEqual(extrair_cupom("https://x.com/p cupom DIADACRIANCA"), "DIADACRIANCA")
+        self.assertEqual(extrair_cupom("https://x.com/p cupom: dia10"), "DIA10")
+        self.assertEqual(extrair_cupom("código BLACK50 https://x.com/p"), "BLACK50")
+        self.assertIsNone(extrair_cupom("https://x.com/p cupom de 10% na página"))   # "de" não é código
+        self.assertIsNone(extrair_cupom("https://x.com/cupom/ABC123"))               # 'cupom' dentro da URL não vale
+        self.assertIsNone(extrair_cupom("só o link https://x.com/p"))
+
+    def test_post_no_estilo_cupom_e_link(self):
+        from ofertas.formatter import montar_caption
+        o = Oferta("shopee", "s1", "Assento Redutor Infantil", "https://s.shopee.com.br/abc123", preco=55.16, cupom="DIADACRIANCA")
+        with mock.patch.object(config, "link_visivel", True):
+            c = montar_caption(o)
+        self.assertIn("Use o cupom: <code>DIADACRIANCA</code>", c)
+        self.assertIn("🛍 Compre aqui: https://s.shopee.com.br/abc123", c)
+        self.assertLess(c.index("Use o cupom"), c.index("Compre aqui"))
+
+    def test_link_longo_vira_texto_clicavel_e_da_para_desligar(self):
+        from ofertas.formatter import montar_caption
+        longo = "https://www.amazon.com.br/dp/B0ABCDEFGH?tag=arrudalucas-20&linkCode=ogi&th=1"
+        o = Oferta("amazon", "B0", "Kit Lavagem", longo, preco=10)
+        with mock.patch.object(config, "link_visivel", True):
+            self.assertIn('<a href="' + longo.replace("&", "&amp;") + '">Compre aqui</a>', montar_caption(o))
+        with mock.patch.object(config, "link_visivel", False):
+            self.assertNotIn("Compre aqui", montar_caption(o))
+
+    def test_ml_avisa_quando_o_preco_depende_de_cupom(self):
+        from bs4 import BeautifulSoup
+        from ofertas.sources.mercadolivre import _parse_card
+        html = ('<div class="poly-card"><a class="poly-component__title" href="https://www.mercadolivre.com.br/p/MLB123">Ar Condicionado Split 12000 Btu</a>'
+                '<div class="poly-component__price"><s class="andes-money-amount andes-money-amount--previous"><span class="andes-money-amount__fraction">4.300</span></s>'
+                '<div class="poly-price__current"><span class="andes-money-amount__fraction">1.188</span></div>'
+                '<span class="poly-price__discount-polylabel">72% OFF com Cupom</span> ou R$ 1.288 em 10x</div>'
+                '<div class="poly-component__coupons"><div class="poly-coupons__wrapper">5% OFF com Cupom</div></div></div>')
+        o = _parse_card(BeautifulSoup(html, "lxml").select_one("div.poly-card"))
+        self.assertEqual((o.preco, o.preco_original, o.desconto), (1188.0, 4300.0, 72))
+        self.assertIn("Preço com cupom do ML", o.extra)
+        self.assertIn("Cupom extra: 5% OFF", o.extra)
+
+    def test_nicho_ar_condicionado(self):
+        from ofertas.nichos import catalogo, relevante
+        for t in ["Ar Condicionado Split Elgin Eco Inverter 12000 Btu", "Ar-Condicionado Portátil Philco 10000 BTUs",
+                  "Suporte para Ar Condicionado 400mm Reforçado"]:
+            self.assertTrue(relevante(t, ["arcondicionado"]), t)
+        for t in ["Geladeira Frost Free Inverter 400L", "Lavadora Inverter 12kg", "Ar Condicionado Automotivo 12V para Carro"]:
+            self.assertFalse(relevante(t, ["arcondicionado"]), t)
+        self.assertTrue(relevante("qualquer", ["arcondicionado"], categoria="MLB1646"))      # categoria do ML já prova
+        self.assertEqual({n["chave"]: n["desconto_sugerido"] for n in catalogo()}["arcondicionado"], 10)
+
+
 if __name__ == "__main__":
     unittest.main()

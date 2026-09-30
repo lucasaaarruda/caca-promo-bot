@@ -358,7 +358,15 @@ function desenharNichos(){
      </div>`).join("");
 }
 function toggleNicho(k){
-  if(NICHOS_SEL.has(k)) NICHOS_SEL.delete(k); else NICHOS_SEL.add(k);
+  const n = CATALOGO.find(x=>x.chave===k);
+  if(NICHOS_SEL.has(k)) NICHOS_SEL.delete(k);
+  else {
+    NICHOS_SEL.add(k);
+    if(n && n.desconto_sugerido && !$("#c_desc").value){
+      $("#c_desc").value = n.desconto_sugerido;
+      toast(`Desconto mínimo sugerido para ${n.nome}: ${n.desconto_sugerido}%`);
+    }
+  }
   document.querySelector(`.nicho[data-k="${k}"]`).classList.toggle("on");
 }
 

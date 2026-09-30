@@ -48,3 +48,14 @@ def parse_nota(texto: str | None) -> float | None:
         return None
     n = float(m.group(1).replace(",", "."))
     return n if 0 < n <= 5 else None
+
+
+def extrair_cupom(texto: str | None) -> str | None:
+    """"link ... cupom DIADACRIANCA" -> "DIADACRIANCA". Só aceita código em MAIÚSCULAS ou com número,
+    para "cupom de 10%" não virar código."""
+    sem_urls = re.sub(r"https?://\S+", " ", texto or "")
+    for m in re.finditer(r"(?:cupom|c[oó]digo)\s*[:=\-]?\s*([A-Za-z0-9_-]{3,30})", sem_urls, re.I):
+        codigo = m.group(1).strip("-_")
+        if len(codigo) >= 3 and (codigo.isupper() or any(c.isdigit() for c in codigo)):
+            return codigo.upper()
+    return None

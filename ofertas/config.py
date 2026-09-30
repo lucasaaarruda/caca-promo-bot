@@ -47,6 +47,7 @@ class Config:
         self.max_posts_por_ciclo: int = int(geral.get("max_posts_por_ciclo", 0))
         self.espacamento_segundos: int = int(geral.get("espacamento_segundos", 120))
         self.nao_repetir_dias: int = int(geral.get("nao_repetir_dias", 7))
+        self.link_visivel: bool = bool(geral.get("link_visivel", True))
         self.aviso_amazon: str = str(geral.get("aviso_amazon") or "").strip()
         self.relatorio_hora: str = str(geral.get("relatorio_hora") or "").strip()  # "21:00"; vazio = sem relatório
         self.horario_ativo: str = str(geral.get("horario_ativo") or "").strip()  # "08:00-23:00"; vazio = 24h

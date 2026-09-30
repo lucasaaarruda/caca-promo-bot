@@ -15,7 +15,7 @@ from .config import config
 from .models import Oferta
 from .sources import detectar_fonte
 from .telegram_poster import postar_oferta
-from .utils import extrair_urls
+from .utils import extrair_cupom, extrair_urls
 
 log = logging.getLogger("ofertas.bot")
 
@@ -33,7 +33,7 @@ async def _cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🤖 Bot de ofertas no ar!\n\n"
         "• Cole aqui um link do Mercado Livre, Shopee ou Amazon e eu preparo o post "
-        "com o seu link de afiliado.\n"
+        "com o seu link de afiliado. Para incluir um cupom no post, escreva depois do link: cupom CODIGO\n"
         "• /id — mostra o ID deste chat (ou do canal, se você encaminhar um post dele)\n"
         "• /ciclo — roda uma busca de ofertas agora\n"
         "• /status — situação do bot\n"
@@ -114,6 +114,7 @@ async def _receber_link(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await aviso.edit_text(f"❌ Não consegui converter: {e}")
         return
     await aviso.delete()
+    oferta.cupom = extrair_cupom(msg.text or msg.caption)
 
     token = secrets.token_hex(4)
     _limpar_pendentes()

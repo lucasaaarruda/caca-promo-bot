@@ -148,6 +148,18 @@ NICHOS: dict[str, dict] = {
                    "parfum", "body splash", "fragrancia", "edp", "edt", "kit perfume"],
         "excluir": ["porta perfume", "amostra", "atomizador vazio", "sabonete", "hidratante corporal"],
     },
+    "arcondicionado": {
+        "emoji": "❄️", "nome": "Ar Condicionado",
+        "ml": {"MLB1646": "Ares Condicionados"},
+        "ml_confiavel": True,
+        "amazon_dep": {"appliances": "Eletrodomésticos"},
+        "amazon_buscas": ["ar condicionado split", "ar condicionado inverter", "ar condicionado portátil"],
+        "shopee": ["ar condicionado", "ar condicionado split", "ar condicionado portátil"],
+        "termos": ["ar condicionado", "ar-condicionado", "split", "btu", "btus", "evaporadora", "condensadora",
+                   "climatizador", "suporte para ar condicionado", "limpa ar condicionado"],
+        "excluir": ["automotivo", "veicular", "carro", "capa protetora"],
+        "desconto_sugerido": 10,  # ar condicionado raramente passa de 25% de desconto
+    },
     "livros": {
         "emoji": "📚", "nome": "Livros",
         "ml": {"MLB1196": "Livros, Revistas e Comics"},
@@ -159,7 +171,8 @@ NICHOS: dict[str, dict] = {
 
 def catalogo() -> list[dict]:
     """Lista para o painel: [{chave, emoji, nome}]."""
-    return [{"chave": k, "emoji": v["emoji"], "nome": v["nome"]} for k, v in NICHOS.items()]
+    return [{"chave": k, "emoji": v["emoji"], "nome": v["nome"], "desconto_sugerido": v.get("desconto_sugerido")}
+            for k, v in NICHOS.items()]
 
 
 def ler_selecao() -> list[str]:

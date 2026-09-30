@@ -72,6 +72,15 @@ def _detalhes(o: Oferta) -> list[str]:
     return linhas
 
 
+def _linha_link(o: Oferta) -> str | None:
+    """"🛍 Compre aqui: link" — link curto aparece inteiro; longo (Amazon) vira texto clicável."""
+    if not (config.link_visivel and o.url_afiliado):
+        return None
+    if len(o.url_afiliado) <= 45:
+        return f"🛍 Compre aqui: {escape(o.url_afiliado)}"
+    return f'🛍 <a href="{escape(o.url_afiliado, quote=True)}">Compre aqui</a>'
+
+
 def montar_caption(o: Oferta) -> str:
     tem_desconto = bool(o.preco and o.preco_original and o.preco_original > o.preco)
     desconto = o.desconto if tem_desconto else None
@@ -85,9 +94,15 @@ def montar_caption(o: Oferta) -> str:
     elif o.preco:
         linhas.append(f"✅ <b>{preco_br(o.preco)}</b>")
 
+    if o.cupom:
+        linhas += ["", f"🎟 Use o cupom: <code>{escape(o.cupom)}</code>"]  # <code>: toque para copiar
+
     detalhes = _detalhes(o)
     if detalhes:
         linhas += [""] + detalhes
+
+    if link := _linha_link(o):
+        linhas += ["", link]
 
     linhas += ["", _PLATAFORMA.get(o.plataforma, o.plataforma)]
     if o.plataforma == "amazon" and config.aviso_amazon:  # frase exigida pelo contrato da Amazon
