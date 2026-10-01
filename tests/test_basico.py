@@ -903,5 +903,44 @@ class MotoSaiDoAutomotivo(unittest.TestCase):
             self.assertIn(termo, buscas)
 
 
+class FerramentasEPlural(unittest.TestCase):
+    def test_plural_em_qualquer_palavra_do_termo(self):
+        from ofertas.nichos import _casa, _norm
+        self.assertTrue(_casa("chave allen", _norm("Kit Jogo Chaves Allen 8 Peças Preto")))
+        self.assertTrue(_casa("luva de trabalho", _norm("Par de Luvas de Trabalho Reforçadas")))
+        self.assertTrue(_casa("fita isolante", _norm("3 Fitas Isolantes 19mm")))
+        self.assertFalse(_casa("chave allen", _norm("Chavealleniforme")))      # continua exigindo palavra inteira
+        self.assertFalse(_casa("luva de trabalho", _norm("Luva de Boxe Profissional")))
+
+    def test_ferramentas_aceita_a_lista_do_dono_e_barra_o_que_nao_e(self):
+        from ofertas.nichos import relevante
+        bons = ["Jogo de Chaves de Fenda e Philips 6 Peças Isoladas", "Martelo de Unha 27mm Cabo Fibra", "Parafusadeira Furadeira de Impacto Vonder PFV120i",
+                "Bolsa Maleta de Ferramentas 18 Polegadas Reforçada 16 Bolsos", "Jogo de Chave Torx + Jogo Allen Curta Kit com 18 Peças",
+                "Kit Jogo Chaves Allen 8 Peças", "Multímetro Digital Profissional", "Ferro de Solda 60w 220v", "Óculos de Proteção Incolor Antiembaçante",
+                "Protetor Auricular Tipo Concha", "Lanterna de Cabeça Recarregável", "Fita Veda Rosca 18mm x 50m", "Trena 5m Emborrachada",
+                "Jogo de Soquetes com Catraca 40 Peças", "Serra Tico-Tico 650w", "Esmerilhadeira Angular 4 1/2 Bosch"]
+        for t in bons:
+            self.assertTrue(relevante(t, ["ferramentas"]), t)
+        ruins = ["Kit Ferramentas de Brinquedo Infantil Bob Construtor", "Alicate de Cutícula Manicure Inox", "Luva de Boxe Profissional Couro",
+                 "Máscara Facial de Argila Verde", "Lixa de Unha Profissional 100/180", "Extensão de Cabelo Humano Mega Hair",
+                 "Ímã de Geladeira Decorativo", "Livro Ferramentas de Gestão"]
+        for t in ruins:
+            self.assertFalse(relevante(t, ["ferramentas"]), t)
+
+    def test_categorias_de_ferramentas_sao_confiaveis_mas_as_exclusoes_valem(self):
+        from ofertas.nichos import categorias_confiaveis, relevante
+        conf = categorias_confiaveis(["ferramentas"])
+        for cid in ("MLB2526", "MLB189008", "MLB454904", "MLB189215", "MLB455200"):
+            self.assertIn(cid, conf)
+        self.assertTrue(relevante("Item sem nome de ferramenta no título", ["ferramentas"], categoria="MLB189008"))
+        self.assertFalse(relevante("Kit de Brinquedo Parafusadeira Infantil", ["ferramentas"], categoria="MLB189008"))
+
+    def test_buscas_da_api_cobrem_a_lista_do_dono(self):
+        from ofertas.nichos import expandir
+        buscas = expandir(["ferramentas"])["ml_buscas"]
+        for termo in ("martelo de unha", "jogo de bits", "ímã telescópico", "detector de canos e fios", "painel de ferramentas", "fita silver tape"):
+            self.assertIn(termo, buscas)
+
+
 if __name__ == "__main__":
     unittest.main()
