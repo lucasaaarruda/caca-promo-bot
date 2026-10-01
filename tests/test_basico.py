@@ -257,8 +257,9 @@ class Qualidade(unittest.TestCase):
         for t in ["Alto Falante Jbl Triaxial 6trfx55 Flex4 110w", "Capa Chuva Motoqueiro Pvc Impermeável Motoboy",
                   "Bebê Conforto Para Bebê Comfort de 0 à 13kgs", "Escapamento F1 Mini Tri Fortuna Titan/fan/start"]:
             self.assertTrue(relevante(t, ["automotivo"]), t)
-        for t in ["Aspirador De Pó Vertical e Sem Fio Redroad W15", "Kit 4 Rádios Comunicadores Walkie Talkie"]:
-            self.assertFalse(relevante(t, ["automotivo"]), t)
+        for t in ["Aspirador De Pó Vertical e Sem Fio Redroad W15", "Kit 4 Rádios Comunicadores Walkie Talkie",
+                  "Óculos De Sol Masculino Uv400 Polarizado vintage Preto"]:
+            self.assertFalse(relevante(t, ["automotivo"], categoria="MLB1747"), t)   # nem a categoria confiável salva
 
 
 class Legenda(unittest.TestCase):

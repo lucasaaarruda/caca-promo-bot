@@ -135,7 +135,7 @@ NICHOS: dict[str, dict] = {
         # ...e não pode conter nenhum destes (palavras que enganam: cueca "microfibra", celular "Moto G"...)
         "excluir": ["biblia", "livro", "livros", "colorir", "brinquedo", "brinquedos", "boneca", "pelucia",
                     "mobile", "hot wheels", "devocional", "romance", "cafe com deus", "motorola", "moto g",
-                    "celular", "smartphone", "cueca", "cuecas", "badminton"],
+                    "celular", "smartphone", "cueca", "cuecas", "badminton", "oculos de sol", "aspirador vertical", "passapano"],
     },
     "country": {
         "emoji": "🤠", "nome": "Country (masculino e feminino)",
