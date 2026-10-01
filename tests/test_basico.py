@@ -268,7 +268,8 @@ class Legenda(unittest.TestCase):
         from ofertas.formatter import montar_caption
         o = Oferta("mercadolivre", "m", "Auxiliar de Partida", "u", preco=148.45, preco_original=300.0,
                    desconto_pct=50, extra="⭐ 4.8 · +5mil vendidos · 🚚 Frete grátis · 💠 preço no Pix", nota=4.8, vendas=5000)
-        c = montar_caption(o)
+        with mock.patch.object(config, "estilo_post", "completo"):
+            c = montar_caption(o)
         for trecho in ["SUPER OFERTA", "R$ 300,00", "R$ 148,45", "-50%", "Você economiza R$ 151,55",
                        "⭐ 4,8", "+5 mil vendidos", "Frete grátis", "preço no Pix", "Mercado Livre"]:
             self.assertIn(trecho, c)
@@ -940,6 +941,58 @@ class FerramentasEPlural(unittest.TestCase):
         buscas = expandir(["ferramentas"])["ml_buscas"]
         for termo in ("martelo de unha", "jogo de bits", "ímã telescópico", "detector de canos e fios", "painel de ferramentas", "fita silver tape"):
             self.assertIn(termo, buscas)
+
+
+class EstiloSimples(unittest.TestCase):
+    def _cap(self, o, estilo="simples"):
+        from ofertas.formatter import montar_caption
+        with mock.patch.object(config, "estilo_post", estilo), mock.patch.object(config, "link_visivel", True),              mock.patch.object(config, "aviso_amazon", ""):
+            return montar_caption(o)
+
+    def test_exemplo_da_parafusadeira_com_cupom_e_pix(self):
+        o = Oferta("mercadolivre", "1", "Parafusadeira Furadeira de Impacto Vonder PFV120i", "https://meli.la/2PUnVxM",
+                   preco=115.0, preco_original=299.0, cupom="OFERTAS", extra="💠 preço no Pix")
+        c = self._cap(o)
+        self.assertEqual(c.splitlines(), [
+            "<b>Parafusadeira Furadeira de Impacto Vonder PFV120i</b>", "",
+            "De <s>R$ 299,00</s> por <b>R$ 115,00</b> no Pix",
+            "🎟 Use o cupom: <code>OFERTAS</code>", "",
+            "🛍 Compre aqui: https://meli.la/2PUnVxM"])
+
+    def test_sem_preco_original_e_sem_cupom_fica_so_o_essencial(self):
+        o = Oferta("shopee", "2", "Jogo de Chave Torx + Jogo Allen Curta Kit com 18 Peças", "https://s.shopee.com.br/8AVeJzfpzD", preco=29.0)
+        c = self._cap(o)
+        self.assertEqual(c.splitlines(), ["<b>Jogo de Chave Torx + Jogo Allen Curta Kit com 18 Peças</b>", "", "Por <b>R$ 29,00</b>",
+                                          "", "🛍 Compre aqui: https://s.shopee.com.br/8AVeJzfpzD"])
+
+    def test_nao_tem_selo_economia_nem_rodape_de_loja(self):
+        o = Oferta("mercadolivre", "3", "Produto qualquer de teste", "https://meli.la/x", preco=50, preco_original=100)
+        c = self._cap(o)
+        for fora in ["OFERTA", "economiza", "Mercado Livre", "-50%"]:
+            self.assertNotIn(fora, c)
+        self.assertIn("De <s>R$ 100,00</s> por <b>R$ 50,00</b>", c)
+
+    def test_mantem_o_que_importa_parcelas_cupom_do_ml_e_prova_social(self):
+        o = Oferta("mercadolivre", "4", "Produto de teste", "https://meli.la/y", preco=1188.0, preco_original=4300.0, nota=4.8, vendas=5000,
+                   extra="⭐ 4.8 · +5mil vendidos · 🚚 Frete grátis · 💳 10x de R$ 128,80 sem juros · 🎟 Preço com cupom do ML (ative o cupom na página do produto)")
+        c = self._cap(o)
+        self.assertIn("💳 10x de R$ 128,80 sem juros", c)
+        self.assertIn("🎟 Preço com cupom do ML", c)             # honestidade sobre o cupom do ML continua
+        self.assertIn("⭐ 4,8  ·  🔥 +5 mil vendidos  ·  🚚 Frete grátis", c)
+        self.assertEqual(c.count("vendidos"), 1)
+
+    def test_amazon_mantem_a_declaracao_exigida(self):
+        from ofertas.formatter import montar_caption
+        o = Oferta("amazon", "B0", "Kit de ferramentas", "https://www.amazon.com.br/dp/B0?tag=x-20", preco=100)
+        frase = "Como participante do Programa de Associados da Amazon, sou remunerado pelas compras qualificadas efetuadas."
+        with mock.patch.object(config, "estilo_post", "simples"), mock.patch.object(config, "aviso_amazon", frase):
+            self.assertIn(frase, montar_caption(o))
+
+    def test_estilo_completo_continua_disponivel(self):
+        o = Oferta("mercadolivre", "5", "Produto de teste", "https://meli.la/z", preco=50, preco_original=100, desconto_pct=50)
+        c = self._cap(o, "completo")
+        self.assertIn("SUPER OFERTA", c)
+        self.assertIn("Você economiza R$ 50,00", c)
 
 
 if __name__ == "__main__":

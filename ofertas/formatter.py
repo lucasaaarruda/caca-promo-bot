@@ -81,7 +81,7 @@ def _linha_link(o: Oferta) -> str | None:
     return f'🛍 <a href="{escape(o.url_afiliado, quote=True)}">Compre aqui</a>'
 
 
-def montar_caption(o: Oferta) -> str:
+def _caption_completo(o: Oferta) -> str:
     tem_desconto = bool(o.preco and o.preco_original and o.preco_original > o.preco)
     desconto = o.desconto if tem_desconto else None
     linhas = [_selo(desconto), f"<b>{escape(titulo_curto(o.titulo))}</b>", ""]
@@ -108,3 +108,53 @@ def montar_caption(o: Oferta) -> str:
     if o.plataforma == "amazon" and config.aviso_amazon:  # frase exigida pelo contrato da Amazon
         linhas.append(f"<i>{escape(config.aviso_amazon)}</i>")
     return "\n".join(linhas)
+
+
+def _caption_simples(o: Oferta) -> str:
+    """Estilo enxuto, como nos grupos de promoção: título, preço "De/Por", cupom (se houver) e o link.
+
+        Parafusadeira Furadeira de Impacto Vonder PFV120i
+
+        De R$ 299,00 por R$ 115,00 no Pix
+        🎟 Use o cupom: OFERTAS
+
+        🛍 Compre aqui: https://meli.la/..."""
+    linhas = [f"<b>{escape(titulo_curto(o.titulo))}</b>", ""]
+
+    partes = [p.strip() for p in (o.extra or "").split(" · ") if p.strip()]
+    no_pix = any("preço no Pix" in p for p in partes)
+    sufixo = " no Pix" if no_pix else ""
+    if o.preco and o.preco_original and o.preco_original > o.preco:
+        linhas.append(f"De <s>{preco_br(o.preco_original)}</s> por <b>{preco_br(o.preco)}</b>{sufixo}")
+    elif o.preco:
+        linhas.append(f"Por <b>{preco_br(o.preco)}</b>{sufixo}")
+
+    parcelas = [p for p in partes if p.startswith("💳")]
+    cupons = [p for p in partes if p.startswith("🎟")]
+    if parcelas:
+        linhas.append(escape(parcelas[0]))
+    if o.cupom:
+        linhas.append(f"🎟 Use o cupom: <code>{escape(o.cupom)}</code>")  # <code>: toque para copiar
+    linhas += [escape(c) for c in cupons]  # "preço com cupom do ML", "cupom extra"
+
+    # uma linha curta de prova social/vantagens, só se houver o que dizer
+    resto = [escape(p) for p in partes if not (p.startswith(("⭐", "💳", "🎟")) or "vendidos" in p or "preço no Pix" in p)]
+    prova = []
+    if o.nota:
+        prova.append(f"⭐ {o.nota:.1f}".replace(".", ","))
+    if o.vendas:
+        prova.append(f"🔥 {_vendas(o.vendas)}")
+    extra = prova + resto
+    if extra:
+        linhas.append("  ·  ".join(extra))
+
+    if link := _linha_link(o):
+        linhas += ["", link]
+    if o.plataforma == "amazon" and config.aviso_amazon:  # frase exigida pelo contrato da Amazon
+        linhas += ["", f"<i>{escape(config.aviso_amazon)}</i>"]
+    return "\n".join(linhas)
+
+
+def montar_caption(o: Oferta) -> str:
+    """O visual do post, conforme geral.estilo_post do config.yaml: "simples" (padrão) ou "completo"."""
+    return _caption_completo(o) if config.estilo_post == "completo" else _caption_simples(o)

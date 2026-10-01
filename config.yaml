@@ -7,6 +7,7 @@ geral:
   variacao_espacamento: 11     # o intervalo varia até ±11% (270s ± 11% = de 4 a 5 minutos); 0 = intervalo exato
   nao_repetir_dias: 7          # não repostar o mesmo produto dentro desse prazo
   horario_ativo: "07:00-23:30" # só posta nesse intervalo (hora do PC); "" = 24h
+  estilo_post: simples         # visual dos posts: "simples" (título, De/Por, cupom, link) ou "completo" (com selo de desconto, economia, nota e loja)
   link_visivel: true           # mostra também o link escrito no texto do post ("Compre aqui: ..."), além do botão
   aviso_amazon: "Como participante do Programa de Associados da Amazon, sou remunerado pelas compras qualificadas efetuadas."
                                # frase exigida pelo contrato da Amazon; vai no fim dos posts da Amazon. "" = desliga

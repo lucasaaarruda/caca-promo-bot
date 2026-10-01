@@ -50,6 +50,7 @@ class Config:
         self.espacamento_segundos: int = int(geral.get("espacamento_segundos", 270))
         self.variacao_espacamento: int = int(geral.get("variacao_espacamento", 11))  # % para mais ou para menos
         self.nao_repetir_dias: int = int(geral.get("nao_repetir_dias", 7))
+        self.estilo_post: str = str(geral.get("estilo_post") or "simples").strip().lower()
         self.link_visivel: bool = bool(geral.get("link_visivel", True))
         self.aviso_amazon: str = str(geral.get("aviso_amazon") or "").strip()
         self.relatorio_hora: str = str(geral.get("relatorio_hora") or "").strip()  # "21:00"; vazio = sem relatório
