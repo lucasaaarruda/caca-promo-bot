@@ -19,6 +19,8 @@ def _problemas(eventos: dict[str, int]) -> list[str]:
         linhas.append(f"🔑 Mercado Livre sem sessão ({n}x): refaça o login no painel")
     if n := eventos.get("ml_link_falhou"):
         linhas.append(f"🔗 Falha ao gerar link do ML ({n}x): veja data/logs/run.log")
+    if n := eventos.get("falha_rede"):
+        linhas.append(f"📡 Queda de conexão com o Telegram ({n}x): as ofertas foram tentadas de novo; confira a internet/VPN")
     if n := eventos.get("falha_post"):
         linhas.append(f"📵 Falha ao postar ({n}x): confira se o bot é administrador dos canais")
     for tipo, n in sorted(eventos.items()):

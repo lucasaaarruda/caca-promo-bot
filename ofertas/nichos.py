@@ -177,7 +177,13 @@ NICHOS: dict[str, dict] = {
         "shopee": ["ar condicionado", "ar condicionado split", "ar condicionado portátil"],
         "termos": ["ar condicionado", "ar-condicionado", "split", "btu", "btus", "evaporadora", "condensadora",
                    "climatizador", "suporte para ar condicionado", "limpa ar condicionado"],
-        "excluir": ["automotivo", "veicular", "carro", "capa protetora"],
+        "excluir": ["automotivo", "automotiva", "veicular", "veiculo", "carro", "carros", "caminhao", "onibus", "trator",
+                    "caminhonete", "pickup", "moto", "12v", "24v", "capa protetora", "caixa evaporadora",
+                    # peças de ar condicionado de carro vêm com o modelo do carro no título (Gol G2 G3 G4...)
+                    "gol", "palio", "uno", "corsa", "celta", "fiesta", "ka", "hb20", "onix", "prisma", "fusca", "kombi",
+                    "strada", "saveiro", "siena", "fox", "polo", "golf", "civic", "corolla", "hilux", "ranger", "l200",
+                    "fiat", "volkswagen", "vw", "chevrolet", "ford", "honda", "toyota", "hyundai", "renault", "nissan",
+                    "peugeot", "citroen", "jeep", "mitsubishi", "kia", "mercedes", "scania", "volvo", "iveco"],
         "desconto_sugerido": 10,  # ar condicionado raramente passa de 25% de desconto
     },
     "livros": {

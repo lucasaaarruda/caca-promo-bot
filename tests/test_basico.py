@@ -830,5 +830,45 @@ class RodizioJustoEntreCanais(unittest.TestCase):
         self.assertEqual(len(primeira), 12)
 
 
+class ArCondicionadoSoDeCasa(unittest.TestCase):
+    def test_pecas_de_ar_condicionado_de_carro_ficam_de_fora(self):
+        from ofertas.nichos import relevante
+        for t in ["Caixa Evaporadora Universal 25.000btu 5 Difusores 12v Ou 24v",
+                  "Capa Proteção Água Caixa Filtro Ar Condicionado Gol G2 G3 G4",
+                  "Compressor Ar Condicionado Fiat Palio Uno Siena Strada",
+                  "Filtro de Cabine Ar Condicionado Honda Civic 2012"]:
+            self.assertFalse(relevante(t, ["arcondicionado"]), t)
+        for t in ["Ar Condicionado Split Elgin Eco Inverter II Wi-fi 12000 Btu", "Ar-Condicionado Portátil Philco 10000 BTUs 220V",
+                  "Ar Condicionado Haier Janela Eletrônico 8500 Btus Frio", "Suporte para Ar Condicionado Split 400mm Reforçado",
+                  "Ar Condicionado Hw Electrolux Maxcomfort Inverter 9k F Branco"]:
+            self.assertTrue(relevante(t, ["arcondicionado"]), t)
+
+
+class AlertaDeRedeNaoMandaProAdmin(unittest.TestCase):
+    def test_queda_de_rede_nao_diz_para_conferir_o_admin(self):
+        import asyncio
+        from telegram.error import NetworkError
+        from ofertas.canais import Canal
+        avisos = []
+
+        async def avisar(bot, texto, **k):
+            avisos.append(texto)
+
+        class Bot:
+            async def send_photo(self, *a, **k):
+                raise NetworkError("httpx.ConnectError: ")
+            send_message = send_photo
+
+        canal = Canal(id="x", nome="X", chat_id="-1")
+        o = Oferta("amazon", "r1", "Produto de teste completo", "https://x/1", preco=50, preco_original=100)
+        with mock.patch.object(config, "canais", [canal]), mock.patch.object(config, "horario_ativo", ""),              mock.patch.object(config, "desconto_minimo", 25), mock.patch.object(config, "espacamento_segundos", 0),              mock.patch.object(pipeline.db, "_DB", pathlib.Path(tempfile.mkdtemp()) / "n.db"),              mock.patch.object(pipeline, "coletar", return_value=[o]), mock.patch.object(pipeline, "avisar_dono", side_effect=avisar),              mock.patch("ofertas.telegram_poster.asyncio.sleep", new=mock.AsyncMock()),              mock.patch.object(pipeline.asyncio, "sleep", new=mock.AsyncMock()):
+            n = asyncio.run(pipeline.executar_ciclo(Bot()))
+            self.assertEqual(n, 0)
+            self.assertTrue(pipeline.db.ja_postada("x|amazon:r1", 7) is False)   # não ficou registrado: volta na próxima rodada
+        self.assertEqual(len(avisos), 1)
+        self.assertIn("conexão com o Telegram caiu", avisos[0])
+        self.assertNotIn("administrador", avisos[0])
+
+
 if __name__ == "__main__":
     unittest.main()

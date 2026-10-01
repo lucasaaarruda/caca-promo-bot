@@ -6,6 +6,7 @@ import time
 from dataclasses import replace
 
 from telegram import Bot
+from telegram.error import NetworkError, TimedOut
 
 from . import db
 from .canais import Canal
@@ -267,6 +268,15 @@ async def executar_ciclo(bot: Bot) -> int:
             db.registrar(o, c.id)  # antes de postar: se o processo cair no meio, não reposta
             try:
                 await postar_oferta(bot, replace(o, url_afiliado=link), c.chat_id)
+            except (NetworkError, TimedOut) as e:
+                # queda de conexão: não é problema do canal. A oferta volta na próxima rodada e o aviso é raro
+                log.error("Falha de rede ao postar '%s' em %s: %s", o.titulo[:60], c.nome, e)
+                db.esquecer(chave)
+                db.registrar_evento("falha_rede", f"{c.id}: {e}")
+                await avisar_dono(bot, "⚠️ A conexão com o Telegram caiu e algumas postagens falharam. "
+                                       "Elas serão tentadas de novo na próxima rodada. Se isso se repetir muito, "
+                                       "verifique a internet, a VPN ou o antivírus do PC.", repetir_apos_h=3)
+                continue
             except Exception as e:
                 log.error("Falha ao postar '%s' em %s: %s", o.titulo[:60], c.nome, e)
                 db.esquecer(chave)
