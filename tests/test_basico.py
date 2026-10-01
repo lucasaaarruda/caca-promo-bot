@@ -74,10 +74,10 @@ class Relevancia(unittest.TestCase):
         from ofertas.nichos import relevante
         ok = ["Central Multimídia MP5 Tela 7 Polegadas Roadstar", "TNT Pulverizador Snow Foam 2L Manual Detailing",
               "Kit Lavagem Completa Shampoo Cera Tok Final", "Carregador De Bateria Automotivo Bivolt",
-              "Assento De Carro Infantil Elevação Fit Up", "Fone De Ouvido Para Capacete Bluetooth",
+              "Assento De Carro Infantil Elevação Fit Up",
               "Rastreador GPS Veicular 4G", "Cinta Fita 70 Ton Reboque Guincho 4x4"]
         fora = ["Bíblia NVT Filament Letra Grande", "Cute & Comfy Coloring Book Livro de Colorir",
-                "Hot Wheels City Pista de Brinquedo Reboque de Dragão", "Móbile Centopeia Espiral com Chocalho",
+                "Hot Wheels City Pista de Brinquedo Reboque de Dragão", "Móbile Centopeia Espiral com Chocalho", "Fone De Ouvido Para Capacete Bluetooth",
                 "Meditações de Marco Aurélio", "Esponja Prateada Unitária Bettanin"]
         for t in ok:
             self.assertTrue(relevante(t, ["automotivo"]), t)
@@ -254,8 +254,8 @@ class Qualidade(unittest.TestCase):
 
     def test_termos_automotivo_achados_nos_dados_reais(self):
         from ofertas.nichos import relevante
-        for t in ["Alto Falante Jbl Triaxial 6trfx55 Flex4 110w", "Capa Chuva Motoqueiro Pvc Impermeável Motoboy",
-                  "Bebê Conforto Para Bebê Comfort de 0 à 13kgs", "Escapamento F1 Mini Tri Fortuna Titan/fan/start"]:
+        for t in ["Alto Falante Jbl Triaxial 6trfx55 Flex4 110w", "Bebê Conforto Para Bebê Comfort de 0 à 13kgs",
+                  "Kit 2 Tweeter Jbl Auto St400 Preto Profissional", "Compressor de Ar Portátil Digital para Carro, Moto e Bike"]:
             self.assertTrue(relevante(t, ["automotivo"]), t)
         for t in ["Aspirador De Pó Vertical e Sem Fio Redroad W15 Seco Úmido", "Kit 4 Rádios Comunicadores Walkie Talkie"]:
             self.assertFalse(relevante(t, ["automotivo"]), t)                       # sem termo do nicho
@@ -870,6 +870,37 @@ class AlertaDeRedeNaoMandaProAdmin(unittest.TestCase):
         self.assertEqual(len(avisos), 1)
         self.assertIn("conexão com o Telegram caiu", avisos[0])
         self.assertNotIn("administrador", avisos[0])
+
+
+class MotoSaiDoAutomotivo(unittest.TestCase):
+    MOTO = ["Frente Completa Cg 150 160 Titan Fan 2025 Paralama", "Kit Carenagem Moto Pro Tork Biz 125 Ks Es", "Capacete Moto Fechado Masculino Preto",
+            "Capa Chuva Motoqueiro Pvc Impermeável Motoboy", "Baú Moto Traseiro 65 Litros Aluminio", "Escapamento F1 Mini Tri Fortuna Titan/fan/start",
+            "Intercomunicador Bluetooth Para Capacete De Moto V6", "Bateria Moura MA5-D 5 Ah 12V Selada para Honda, Yamaha e Mais"]
+
+    def test_peca_e_acessorio_de_moto_nao_entra_no_automotivo_nem_pela_categoria_confiavel(self):
+        from ofertas.nichos import relevante
+        for t in self.MOTO:
+            self.assertFalse(relevante(t, ["automotivo"]), t)
+            self.assertFalse(relevante(t, ["automotivo"], categoria="MLB22693"), t)
+
+    def test_item_para_carro_e_moto_continua_valendo(self):
+        from ofertas.nichos import relevante
+        self.assertTrue(relevante("Mini Compressor de Ar Digital Portátil para Carro, Moto e Bicicleta", ["automotivo"]))
+        self.assertTrue(relevante("Kit Ferramentas Parafusadeira 20v Carro Moto", ["automotivo"]))
+
+    def test_moto_vira_nicho_proprio_para_quem_quiser_um_canal_de_moto(self):
+        from ofertas.nichos import NICHOS, categorias_confiaveis, expandir, relevante
+        self.assertIn("moto", NICHOS)
+        for t in self.MOTO:
+            self.assertTrue(relevante(t, ["moto"]), t)
+        self.assertNotIn("MLB243551", expandir(["automotivo"])["ml"])      # peças de moto saíram da coleta do automotivo
+        self.assertIn("MLB243551", expandir(["moto"])["ml"])
+
+    def test_tweeter_e_busca_da_api_para_o_que_o_grupo_de_referencia_posta(self):
+        from ofertas.nichos import expandir
+        buscas = expandir(["automotivo"])["ml_buscas"]
+        for termo in ("tweeter jbl selenium", "lavadora alta pressão wap", "adaptador engate rápido karcher", "pneu aro 14"):
+            self.assertIn(termo, buscas)
 
 
 if __name__ == "__main__":

@@ -30,8 +30,8 @@ fontes:
     ativa: true
     paginas: 1                 # páginas de mercadolivre.com.br/ofertas por categoria (~48 itens cada)
     requisicoes_por_ciclo: 12  # rodízio: quantas categorias consultar por rodada (0 = todas de uma vez)
-    buscas_api_por_ciclo: 6    # com a API oficial (ML_APP_ID/SECRET): quantas fontes (mais vendidos + palavras-chave) por rodada
-    produtos_por_rodada: 30    # com a API oficial: teto de produtos NOVOS consultados por rodada (cada um custa 2 chamadas)
+    buscas_api_por_ciclo: 12   # com a API oficial (ML_APP_ID/SECRET): quantas fontes (mais vendidos + palavras-chave) por rodada
+    produtos_por_rodada: 60    # com a API oficial: teto de produtos NOVOS consultados por rodada (cada um custa 2 chamadas)
     destaques_api: true        # com a API oficial: descobre também os MAIS VENDIDOS das categorias do canal
     categorias: {}             # vazio = todas as categorias.
     # Para um nicho, troque por (id: nome). Exemplos de categorias do Mercado Livre:
