@@ -1002,6 +1002,26 @@ class CupomFixoDoCanal(unittest.TestCase):
         self.assertEqual(validar([{"nome": "B", "chat_id": "-2"}])[0].cupom, "")
 
 
+
+class NichosCountryEPerfumes(unittest.TestCase):
+    def test_country_aceita_marcas_e_barra_falsos(self):
+        from ofertas.nichos import relevante
+        for t in ["Camisa Masculina Selff Western Manga Longa", "Calça Wrangler Cowboy Cut Masculina",
+                  "Bota Texana Bico Fino Couro", "Chapéu Country Americano Rodeio Barretos"]:
+            self.assertTrue(relevante(t, ["country"]), t)
+        for t in ["Pneu Jeep Wrangler Aro 17", "Boneca Boiadeira Articulada", "Camiseta Preta Lisa Algodão",
+                  "Bota de Segurança Trabalho Bico de Aço"]:
+            self.assertFalse(relevante(t, ["country"]), t)
+
+    def test_perfumes_aceita_marcas_e_barra_falsos(self):
+        from ofertas.nichos import relevante
+        for t in ["Perfume Lattafa His Confession Eau De Parfum 100ml", "Armaf Club De Nuit Intense Man 105ml",
+                  "Body Splash Feminino 200ml", "Colônia Deo Masculina 100ml"]:
+            self.assertTrue(relevante(t, ["perfumes"]), t)
+        for t in ["Kit Colônia Infantil Cebolinha", "Perfume Capilar Anti Frizz", "Porta Perfume de Viagem",
+                  "Perfume para Ambiente Difusor", "Hidratante Natura Ekos", "Camiseta Dior Preta"]:
+            self.assertFalse(relevante(t, ["perfumes"]), t)
+
 class BloqueioDoML(unittest.TestCase):
     def test_pagina_de_verificacao_para_a_rodada(self):
         from ofertas.sources import mercadolivre
