@@ -93,7 +93,14 @@ NICHOS: dict[str, dict] = {
                       "espuma ativa lava jato", "aromatizante automotivo", "capa de volante", "carregador veicular",
                       "tweeter jbl selenium", "lavadora alta pressão wap", "adaptador engate rápido karcher", "shampoo automotivo",
                       "pneu aro 13", "pneu aro 14", "pneu aro 15", "fita led interior carro", "escova detalhamento automotivo",
-                      "amortecedor porta-malas", "palheta limpador para-brisa", "pastilha de freio"],
+                      "amortecedor porta-malas", "palheta limpador para-brisa", "pastilha de freio",
+                      "espuma mágica proauto", "kit limpeza interna vonixx", "restaurax vonixx", "v-floc vonixx",
+                      "liqui moly aditivo", "fluido de freio dot 4", "macaco hidráulico jacaré", "tacômetro conta-giros",
+                      "difusor de escape eletrônico", "volante esportivo deep dish", "canhão de espuma snow foam",
+                      "quebra-sol para-brisa", "inversor de energia automotivo", "carregador veicular retrátil",
+                      "multimídia carplay 7 polegadas", "lavadora portátil alta pressão bateria",
+                      "aspirador automotivo portátil", "luz led interior carro", "cheirinho para carro",
+                      "kit lavagem caraíva", "cera alien", "selante de pneus gloss", "limpa alumínio vintex alumax"],
         # subcategorias do ML (árvore pública): cada uma tem a sua página de ofertas
         "ml": {"MLB188063": "Limpeza Automotiva", "MLB3381": "Som Automotivo", "MLB2227": "Ferramentas para Veículos",
                "MLB22693": "Peças de Carros", "MLB1747": "Acessórios de Carros",
@@ -109,7 +116,12 @@ NICHOS: dict[str, dict] = {
                "MLB430584": "Removedores de Arranhões", "MLB429409": "Abrilhantadores"},
         "ml_confiavel": True,  # a categoria já prova que é do nicho: só as exclusões valem
         "amazon_dep": {"automotive": "Automotivo"},
-        "shopee": ["acessório carro", "suporte veicular", "capacete"],
+        "amazon_buscas": ["shampoo automotivo", "cera automotiva", "aspirador automotivo", "multimídia carplay",
+                          "kit lavagem automotiva", "aditivo combustível", "aromatizante carro"],
+        "shopee": ["acessório carro", "suporte veicular", "capacete", "cheirinho carro", "aspirador automotivo",
+                   "multimídia carplay", "capa de volante", "carregador veicular", "quebra-sol para-brisa",
+                   "shampoo automotivo", "kit lavagem carro", "pneu aro 14", "lâmpada led carro",
+                   "difusor de escape", "inversor de energia automotivo"],
         # relevância (Amazon/Shopee): o título precisa conter um destes termos (palavra inteira, sem acento)...
         "termos": ["carro", "carros", "automotivo", "automotiva", "automotivos", "veicular", "veiculo", "veiculos",
                    "moto", "motos", "motocicleta", "capacete", "pneu", "pneus", "calibrador",
@@ -135,7 +147,16 @@ NICHOS: dict[str, dict] = {
                    "capa de volante", "capa de banco", "quebra-sol", "protetor solar para-brisa", "bicos para lavadora",
                    "engate rapido", "selante", "desengraxante", "aromatizante", "abafador", "ponteira", "catalisador",
                    "pastilha", "bateria 20v", "parafusadeira", "chave de impacto", "lavadora de pressao",
-                   "tweeter", "super tweeter", "selenium", "pneu aro", "kit lavagem", "carnauba"],
+                   "tweeter", "super tweeter", "selenium", "pneu aro", "kit lavagem", "carnauba",
+                   # vistos em grupos de referência: marcas de estética/química automotiva
+                   "proauto", "liqui moly", "vintex", "alumax", "restaurax", "caraiva", "easytech", "meguiars",
+                   "menzerna", "autoglym", "motul", "castrol", "wurth", "tekna", "karcher",
+                   # produtos
+                   "espuma magica", "difusor de escape", "escape eletronico", "canhao de espuma", "pistola de espuma",
+                   "inversor de energia", "inversor veicular", "tacometro", "conta giros", "conta-giros", "pneu pretinho", "pretinho para pneu",
+                   "revitalizador de pneu", "revitalizador de plastico", "restaurador de plastico", "descontaminante",
+                   "organizador de porta malas", "organizador de porta-malas", "carregador retratil", "macaco jacare",
+                   "lavadora portatil", "mangueira para lavadora", "kit limpeza interna", "limpa estofado automotivo"],
         # ...e não pode conter nenhum destes (palavras que enganam: cueca "microfibra", celular "Moto G"...)
         "excluir": ["biblia", "livro", "livros", "colorir", "brinquedo", "brinquedos", "boneca", "pelucia",
                     "mobile", "hot wheels", "devocional", "romance", "cafe com deus", "motorola", "moto g",

@@ -1029,6 +1029,16 @@ class NichosCountryEPerfumes(unittest.TestCase):
                   "Óculos de Sol Tom Ford", "Bolsa Gucci Feminina Couro", "Tênis Prada Masculino", "Zara Camisa Linho"]:
             self.assertFalse(relevante(t, ["perfumes"]), t)
 
+class AutomotivoGrupoDeReferencia(unittest.TestCase):
+    def test_titulos_de_grupos_de_carro(self):
+        from ofertas.nichos import relevante
+        for t in ["Espuma Magica Limpador De Uso Geral 400ml Proauto", "Difusor de Escape Eletrônico Universal 2,5",
+                  "Liqui Moly Super Diesel Additiv 250 ml", "Vintex Alumax 1,5L",
+                  "Tacômetro Conta-giros Dragon 52mm", "Canhão de Espuma Snow Foam Gravity",
+                  "Inversor de Energia Automotivo 400W 12V"]:
+            self.assertTrue(relevante(t, ["automotivo"]), t)
+
+
 class BloqueioDoML(unittest.TestCase):
     def test_pagina_de_verificacao_para_a_rodada(self):
         from ofertas.sources import mercadolivre
