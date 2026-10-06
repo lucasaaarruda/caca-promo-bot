@@ -155,8 +155,8 @@ NICHOS: dict[str, dict] = {
                    "espuma magica", "difusor de escape", "escape eletronico", "canhao de espuma", "pistola de espuma",
                    "inversor de energia", "inversor veicular", "tacometro", "conta giros", "conta-giros", "pneu pretinho", "pretinho para pneu",
                    "revitalizador de pneu", "revitalizador de plastico", "restaurador de plastico", "descontaminante",
-                   "organizador de porta malas", "organizador de porta-malas", "carregador retratil", "macaco jacare",
-                   "lavadora portatil", "mangueira para lavadora", "kit limpeza interna", "limpa estofado automotivo"],
+                   "organizador de porta malas", "organizador de porta-malas", "macaco jacare",
+                   "lavadora portatil", "mangueira para lavadora", "limpa estofado automotivo"],
         # ...e não pode conter nenhum destes (palavras que enganam: cueca "microfibra", celular "Moto G"...)
         "excluir": ["biblia", "livro", "livros", "colorir", "brinquedo", "brinquedos", "boneca", "pelucia",
                     "mobile", "hot wheels", "devocional", "romance", "cafe com deus", "motorola", "moto g",
