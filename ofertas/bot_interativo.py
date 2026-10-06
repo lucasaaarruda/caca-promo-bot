@@ -8,7 +8,7 @@ import time
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import NetworkError, TimedOut
-from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
+from telegram.ext import (Application, CallbackQueryHandler, ChatMemberHandler, CommandHandler,
                           ContextTypes, MessageHandler, filters)
 
 from . import db, pipeline, relatorio
@@ -151,6 +151,28 @@ async def _receber_forward(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
 
 
+async def _entrou_em_chat(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Quando o bot é adicionado a um canal/grupo, manda o ID no privado do dono (para cadastrar o canal)."""
+    ev = update.my_chat_member
+    if not ev or ev.chat.type == "private" or not config.owner_id:
+        return
+    status = ev.new_chat_member.status
+    if status not in ("administrator", "member"):
+        return
+    pode_postar = getattr(ev.new_chat_member, "can_post_messages", None)
+    if ev.chat.type == "channel" and status == "administrator" and pode_postar is False:
+        aviso = "\n⚠️ Falta a permissão de *Publicar mensagens* para o bot neste canal."
+    elif ev.chat.type == "channel" and status != "administrator":
+        aviso = "\n⚠️ O bot precisa ser *administrador* do canal para postar."
+    else:
+        aviso = "\n✅ Permissões ok."
+    await ctx.bot.send_message(
+        config.owner_id,
+        f"📢 Fui adicionado em *{ev.chat.title}*\nID: `{ev.chat.id}`{aviso}\n"
+        "Cadastre no painel (Canais) usando esse ID, ou mande o ID para o Claude.",
+        parse_mode="Markdown")
+
+
 async def _callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     if not _e_dono(update):
@@ -221,6 +243,7 @@ def rodar():
     app.add_handler(CommandHandler("ciclo", _cmd_ciclo))
     app.add_handler(CommandHandler("relatorio", _cmd_relatorio))
     app.add_handler(CallbackQueryHandler(_callback))
+    app.add_handler(ChatMemberHandler(_entrou_em_chat, ChatMemberHandler.MY_CHAT_MEMBER))
     app.add_handler(MessageHandler(filters.FORWARDED & filters.ChatType.PRIVATE, _receber_forward))
     app.add_handler(MessageHandler(
         (filters.TEXT | filters.CAPTION) & filters.ChatType.PRIVATE & ~filters.COMMAND,
