@@ -1018,11 +1018,15 @@ class NichosCountryEPerfumes(unittest.TestCase):
         for t in ["Perfume Lattafa His Confession Eau De Parfum 100ml", "Armaf Club De Nuit Intense Man 105ml",
                   "Body Splash Feminino 200ml", "Colônia Deo Masculina 100ml",
                   "Dior Sauvage Eau de Toilette 100ml", "Calvin Klein CK One Eau de Toilette 200ml",
-                  "Natura Kaiak Desodorante Colônia Masculino", "Perfume Carolina Herrera Good Girl 80ml"]:
+                  "Natura Kaiak Desodorante Colônia Masculino", "Perfume Carolina Herrera Good Girl 80ml",
+                  "Maison Alhambra Jean Lowe Immortel 100ml", "Creed Aventus Eau de Parfum 100ml",
+                  "Fragrance World Hawas Elixir 100ml", "Tom Ford Oud Wood Eau de Parfum", "Contratipo 212 VIP Men 100ml",
+                  "Gucci Guilty Pour Homme Eau de Toilette", "Perfume In The Box Masculino 100ml"]:
             self.assertTrue(relevante(t, ["perfumes"]), t)
         for t in ["Kit Colônia Infantil Cebolinha", "Perfume Capilar Anti Frizz", "Porta Perfume de Viagem",
                   "Perfume para Ambiente Difusor", "Hidratante Natura Ekos", "Camiseta Dior Preta",
-                  "Batom Dior Rouge 999", "Camiseta Calvin Klein Slim", "Shampoo Natura Lumina", "Cueca Calvin Klein Kit 3"]:
+                  "Batom Dior Rouge 999", "Camiseta Calvin Klein Slim", "Shampoo Natura Lumina", "Cueca Calvin Klein Kit 3",
+                  "Óculos de Sol Tom Ford", "Bolsa Gucci Feminina Couro", "Tênis Prada Masculino", "Zara Camisa Linho"]:
             self.assertFalse(relevante(t, ["perfumes"]), t)
 
 class BloqueioDoML(unittest.TestCase):
