@@ -480,7 +480,7 @@ class CupomLinkEArCondicionado(unittest.TestCase):
         longo = "https://www.amazon.com.br/dp/B0ABCDEFGH?tag=arrudalucas-20&linkCode=ogi&th=1"
         o = Oferta("amazon", "B0", "Kit Lavagem", longo, preco=10)
         with mock.patch.object(config, "link_visivel", True):
-            self.assertIn('<a href="' + longo.replace("&", "&amp;") + '">Compre aqui</a>', montar_caption(o))
+            self.assertIn("Compre aqui: " + longo.replace("&", "&amp;"), montar_caption(o))
         with mock.patch.object(config, "link_visivel", False):
             self.assertNotIn("Compre aqui", montar_caption(o))
 
@@ -993,6 +993,25 @@ class EstiloSimples(unittest.TestCase):
         c = self._cap(o, "completo")
         self.assertIn("SUPER OFERTA", c)
         self.assertIn("Você economiza R$ 50,00", c)
+
+class CupomFixoDoCanal(unittest.TestCase):
+    def test_campo_do_canal_e_normalizado(self):
+        from ofertas.canais import validar
+        c = validar([{"nome": "A", "chat_id": "-1", "cupom": " ofertas "}])[0]
+        self.assertEqual(c.cupom, "OFERTAS")
+        self.assertEqual(validar([{"nome": "B", "chat_id": "-2"}])[0].cupom, "")
+
+
+class BloqueioDoML(unittest.TestCase):
+    def test_pagina_de_verificacao_para_a_rodada(self):
+        from ofertas.sources import mercadolivre
+        resp = mock.Mock(url="https://www.mercadolivre.com.br/gz/account-verification?go=x", text="")
+        sess = mock.Mock()
+        sess.get.return_value = resp
+        with mock.patch.object(mercadolivre, "sessao", return_value=sess),                 mock.patch.object(mercadolivre, "_categorias_da_rodada", return_value={"A": "a", "B": "b"}):
+            with self.assertRaises(mercadolivre.BloqueioML):
+                mercadolivre.buscar_ofertas()
+        self.assertEqual(sess.get.call_count, 1)  # não insiste nas outras categorias
 
 
 if __name__ == "__main__":

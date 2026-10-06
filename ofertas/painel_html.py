@@ -164,6 +164,7 @@ PAGINA = r"""<!doctype html>
         <div class="fld" style="flex:1"><label>Etiqueta do ML só deste canal <span class="muted">(opcional)</span></label><input id="c_mletq" placeholder="Ex.: automotivo"></div>
         <div class="fld" style="flex:1"><label>Tag da Amazon só deste canal <span class="muted">(opcional)</span></label><input id="c_amztag" placeholder="Ex.: seusite-auto-20"></div>
       </div>
+      <div class="fld"><label>Cupom do ML deste canal <span class="muted">(opcional)</span></label><input id="c_cupom" placeholder="Ex.: OFERTAS"></div>
       <div class="help" style="margin:-6px 0 14px">
         Com etiqueta/tag própria, o painel de afiliados do ML e da Amazon mostra cliques e comissões de cada canal
         <b>em separado</b> — assim você descobre qual nicho rende mais. Crie antes: no ML em Linkbuilder → “Etiqueta em uso”;
@@ -385,7 +386,7 @@ function abrirForm(c, idx){
   $("#c_palavras").value = c.palavras.join(", "); $("#c_excluir").value = c.excluir.join(", ");
   $("#c_desc").value = c.desconto_minimo ?? ""; $("#c_max").value = c.max_posts_por_ciclo ?? "";
   $("#c_semdesc").checked = !!c.aceitar_sem_desconto;
-  $("#c_mletq").value = c.ml_etiqueta || ""; $("#c_amztag").value = c.amazon_tag || "";
+  $("#c_mletq").value = c.ml_etiqueta || ""; $("#c_amztag").value = c.amazon_tag || ""; $("#c_cupom").value = c.cupom || "";
   NICHOS_SEL = new Set(c.nichos); desenharNichos();
   $("#idsBoxCanal").classList.add("hide");
   $("#formCanal").classList.remove("hide");
@@ -417,7 +418,7 @@ async function salvarCanal(){
     nichos: [...NICHOS_SEL], palavras: lista($("#c_palavras").value), excluir: lista($("#c_excluir").value),
     desconto_minimo: num($("#c_desc").value), max_posts_por_ciclo: num($("#c_max").value),
     aceitar_sem_desconto: $("#c_semdesc").checked,
-    ml_etiqueta: $("#c_mletq").value.trim(), amazon_tag: $("#c_amztag").value.trim(),
+    ml_etiqueta: $("#c_mletq").value.trim(), amazon_tag: $("#c_amztag").value.trim(), cupom: $("#c_cupom").value.trim(),
   };
   if(!c.nome || !c.chat_id){ toast("Preencha o nome e o ID do canal.", true); return; }
   if(!c.nichos.length && !c.palavras.length &&

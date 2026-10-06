@@ -17,6 +17,8 @@ def _problemas(eventos: dict[str, int]) -> list[str]:
     linhas = []
     if n := eventos.get("ml_sessao"):
         linhas.append(f"🔑 Mercado Livre sem sessão ({n}x): refaça o login no painel")
+    if n := eventos.get("ml_bloqueio"):
+        linhas.append(f"🛑 Mercado Livre bloqueou a leitura de ofertas ({n}x): o bot usou só a API oficial do ML")
     if n := eventos.get("ml_link_falhou"):
         linhas.append(f"🔗 Falha ao gerar link do ML ({n}x): veja data/logs/run.log")
     if n := eventos.get("falha_rede"):

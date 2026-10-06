@@ -9,8 +9,7 @@ geral:
   horario_ativo: "07:00-23:30" # só posta nesse intervalo (hora do PC); "" = 24h
   estilo_post: simples         # visual dos posts: "simples" (título, De/Por, cupom, link) ou "completo" (com selo de desconto, economia, nota e loja)
   link_visivel: true           # mostra também o link escrito no texto do post ("Compre aqui: ..."), além do botão
-  aviso_amazon: "Como participante do Programa de Associados da Amazon, sou remunerado pelas compras qualificadas efetuadas."
-                               # frase exigida pelo contrato da Amazon; vai no fim dos posts da Amazon. "" = desliga
+  aviso_amazon: "Como Associado da Amazon, eu ganho com compras qualificadas."  # frase exigida pelo contrato da Amazon; vai no fim dos posts da Amazon. "" = desliga
   relatorio_hora: "21:00"      # hora em que o bot manda o relatório do dia no seu privado; "" = desliga
 
 filtros:

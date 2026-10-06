@@ -20,6 +20,9 @@ log = logging.getLogger("ofertas.pipeline")
 DIAS_SIMILAR = 2  # não repete a mesma "família" de produto no canal por este tempo
 
 
+_estado = {"ml_bloqueado": False}
+
+
 def coletar() -> list[Oferta]:
     """Busca ofertas nas fontes automáticas ativas (sem link de afiliado ainda, no caso do ML)."""
     todas: list[Oferta] = []
@@ -46,6 +49,11 @@ def coletar() -> list[Oferta]:
         if mercadolivre.tem_sessao():
             try:
                 todas += mercadolivre.buscar_ofertas()
+                _estado["ml_bloqueado"] = False
+            except mercadolivre.BloqueioML as e:
+                log.warning("%s — seguindo só com a API oficial", e)
+                db.registrar_evento("ml_bloqueio", str(e))
+                _estado["ml_bloqueado"] = True
             except Exception as e:
                 log.error("Mercado Livre: %s", e)
             if mercadolivre_api.disponivel():
@@ -197,6 +205,11 @@ async def executar_ciclo(bot: Bot) -> int:
     if _ciclos_vazios >= 3:
         await avisar_dono(bot, "⚠️ 3 rodadas seguidas sem coletar nenhuma oferta "
                                "(fontes bloqueadas, fora do ar ou sem sessão?). Veja o log do bot.")
+    if _estado["ml_bloqueado"]:
+        await avisar_dono(bot, "⚠️ O Mercado Livre bloqueou a leitura da página de ofertas neste PC (tráfego suspeito). "
+                               "O bot segue com a API oficial do ML, Shopee e Amazon. Costuma liberar sozinho; "
+                               "se durar dias, abra mercadolivre.com.br/ofertas no navegador e resolva a verificação.",
+                          repetir_apos_h=12)
     boas = {c.id: filtrar(brutas, c) for c in canais}
     total_boas = {c.id: len(boas[c.id]) for c in canais}
 
@@ -267,7 +280,8 @@ async def executar_ciclo(bot: Bot) -> int:
             chave = f"{c.id}|{o.uid}"
             db.registrar(o, c.id)  # antes de postar: se o processo cair no meio, não reposta
             try:
-                await postar_oferta(bot, replace(o, url_afiliado=link), c.chat_id)
+                extras = {"cupom": c.cupom} if c.cupom and o.plataforma == "mercadolivre" and not o.cupom else {}
+                await postar_oferta(bot, replace(o, url_afiliado=link, **extras), c.chat_id)
             except (NetworkError, TimedOut) as e:
                 # queda de conexão: não é problema do canal. A oferta volta na próxima rodada e o aviso é raro
                 log.error("Falha de rede ao postar '%s' em %s: %s", o.titulo[:60], c.nome, e)

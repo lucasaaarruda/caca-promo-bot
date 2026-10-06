@@ -76,9 +76,7 @@ def _linha_link(o: Oferta) -> str | None:
     """"🛍 Compre aqui: link" — link curto aparece inteiro; longo (Amazon) vira texto clicável."""
     if not (config.link_visivel and o.url_afiliado):
         return None
-    if len(o.url_afiliado) <= 45:
-        return f"🛍 Compre aqui: {escape(o.url_afiliado)}"
-    return f'🛍 <a href="{escape(o.url_afiliado, quote=True)}">Compre aqui</a>'
+    return f"🛍 Compre aqui: {escape(o.url_afiliado)}"
 
 
 def _caption_completo(o: Oferta) -> str:

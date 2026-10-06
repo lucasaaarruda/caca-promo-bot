@@ -28,6 +28,7 @@ class Canal:
     max_posts_por_ciclo: int | None = None
     aceitar_sem_desconto: bool = False  # posta produto sem desconto listado se muito vendido e bem avaliado
     ml_etiqueta: str = ""    # etiqueta do Linkbuilder só deste canal (vazio = a do .env): mede o nicho no ML
+    cupom: str = ""          # código de cupom fixo deste canal: entra nos posts do ML que não trazem cupom próprio
     amazon_tag: str = ""     # tag de associado só deste canal (vazio = a do .env): mede o nicho na Amazon
 
     @property
@@ -63,6 +64,7 @@ def _de_dict(d: dict) -> Canal:
         aceitar_sem_desconto=bool(d.get("aceitar_sem_desconto", False)),
         ml_etiqueta=str(d.get("ml_etiqueta") or "").strip(),
         amazon_tag=str(d.get("amazon_tag") or "").strip(),
+        cupom=str(d.get("cupom") or "").strip().upper(),
     )
 
 

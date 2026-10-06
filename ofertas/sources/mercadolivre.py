@@ -32,6 +32,10 @@ PERFIL_DIR = DATA_DIR / "ml_profile"
 _RE_ID = re.compile(r"(MLB-?\d{6,})")
 
 
+class BloqueioML(RuntimeError):
+    """O ML mandou a página de verificação de tráfego suspeito em vez das ofertas."""
+
+
 def e_link(url: str) -> bool:
     return any(d in url for d in ("mercadolivre.com", "mercadolibre.com", "meli.la/"))
 
@@ -84,6 +88,9 @@ def buscar_ofertas() -> list[Oferta]:
                 params["page"] = pagina
             r = s.get(URL_OFERTAS, params=params or None, timeout=30)
             r.raise_for_status()
+            if "account-verification" in r.url:
+                # insistir só piora o bloqueio: para a rodada e deixa a API oficial cobrir
+                raise BloqueioML("Mercado Livre bloqueou o acesso às ofertas (verificação de tráfego suspeito)")
             achadas = _parse_pagina(r.text)
             for o in achadas:
                 o.categoria = cat_id or None
