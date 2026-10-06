@@ -1016,10 +1016,13 @@ class NichosCountryEPerfumes(unittest.TestCase):
     def test_perfumes_aceita_marcas_e_barra_falsos(self):
         from ofertas.nichos import relevante
         for t in ["Perfume Lattafa His Confession Eau De Parfum 100ml", "Armaf Club De Nuit Intense Man 105ml",
-                  "Body Splash Feminino 200ml", "Colônia Deo Masculina 100ml"]:
+                  "Body Splash Feminino 200ml", "Colônia Deo Masculina 100ml",
+                  "Dior Sauvage Eau de Toilette 100ml", "Calvin Klein CK One Eau de Toilette 200ml",
+                  "Natura Kaiak Desodorante Colônia Masculino", "Perfume Carolina Herrera Good Girl 80ml"]:
             self.assertTrue(relevante(t, ["perfumes"]), t)
         for t in ["Kit Colônia Infantil Cebolinha", "Perfume Capilar Anti Frizz", "Porta Perfume de Viagem",
-                  "Perfume para Ambiente Difusor", "Hidratante Natura Ekos", "Camiseta Dior Preta"]:
+                  "Perfume para Ambiente Difusor", "Hidratante Natura Ekos", "Camiseta Dior Preta",
+                  "Batom Dior Rouge 999", "Camiseta Calvin Klein Slim", "Shampoo Natura Lumina", "Cueca Calvin Klein Kit 3"]:
             self.assertFalse(relevante(t, ["perfumes"]), t)
 
 class BloqueioDoML(unittest.TestCase):

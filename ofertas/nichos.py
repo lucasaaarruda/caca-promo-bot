@@ -188,14 +188,30 @@ NICHOS: dict[str, dict] = {
                    "eau de parfum", "perfume masculino importado", "perfume feminino importado"],
         "termos": ["perfume", "perfumes", "colonia", "deo colonia", "eau de parfum", "eau de toilette",
                    "parfum", "body splash", "fragrancia", "edp", "edt", "kit perfume",
-                   # casas de perfumaria pura (marcas de moda/cosmético como Dior ou Natura ficam de fora:
-                   # trariam roupa e maquiagem)
+                   # casas de perfumaria pura: valem sozinhas
                    "lattafa", "armaf", "afnan", "al haramain", "rasasi", "paco rabanne", "carolina herrera",
                    "jean paul gaultier", "azzaro", "issey miyake"],
+        # marcas que também vendem roupa, maquiagem e cuidados: só valem JUNTO de um "sinal" de fragrância
+        # ("Dior Sauvage Eau de Toilette" passa; "Camiseta Dior" e "Batom Dior" não)
+        "marcas": ["dior", "chanel", "natura", "boticario", "o boticario", "eudora", "jequiti", "avon", "versace",
+                   "montblanc", "hugo boss", "calvin klein", "dolce gabbana", "giorgio armani", "yves saint laurent",
+                   "ysl", "ralph lauren", "lacoste", "givenchy", "lancome", "burberry", "bvlgari", "kenzo",
+                   "davidoff", "mugler", "thierry mugler", "antonio banderas", "ferrari", "polo", "nautica",
+                   "adidas", "puma", "mahogany", "granado", "phebo", "quasar", "egeo", "kaiak"],
+        "sinais": ["perfume", "perfumes", "parfum", "eau de parfum", "eau de toilette", "eau de cologne", "colonia",
+                   "deo colonia", "desodorante colonia", "edp", "edt", "fragrancia", "body splash", "splash",
+                   "sauvage", "one million", "invictus", "good girl", "la vie est belle", "black opium", "miss dior",
+                   "coco mademoiselle", "bleu de chanel", "ck one", "eternity", "light blue", "le male", "212 vip",
+                   "212 men", "malbec", "kaiak"],
         "excluir": ["porta perfume", "amostra", "decant", "atomizador vazio", "sabonete", "hidratante corporal",
                     "infantil", "capilar", "cabelo", "feromonio", "feromonios", "ambiente", "ambientes", "automotivo",
                     "carro", "carros", "roupa", "roupas", "tecido", "tecidos", "difusor", "vela", "pet", "cachorro",
-                    "vazio", "frasco vazio", "essencia para"],
+                    "vazio", "frasco vazio", "essencia para",
+                    # produtos das mesmas marcas que não são perfume
+                    "camiseta", "camisa", "cueca", "jeans", "bermuda", "blusa", "tenis", "relogio", "oculos", "bolsa",
+                    "carteira", "batom", "base", "po compacto", "rimel", "sombra", "esmalte", "shampoo",
+                    "condicionador", "creme", "esfoliante", "protetor solar", "maquiagem", "desodorante antitranspirante",
+                    "antitranspirante", "roll on"],
         "desconto_sugerido": 15,
     },
     "ferramentas": {
@@ -370,7 +386,12 @@ def relevante(titulo: str, chaves: list[str], palavras=(), excluir=(), categoria
     termos = [x for n in escolhidos for x in n.get("termos", [])] + list(palavras)
     if not termos or any(not n.get("termos") for n in escolhidos):
         return True
-    return any(_casa(x, t) for x in termos)
+    if any(_casa(x, t) for x in termos):
+        return True
+    # marca "ambígua" (Dior, Natura...) só vale acompanhada de um sinal de fragrância no título
+    marcas = [x for n in escolhidos for x in n.get("marcas", [])]
+    sinais = [x for n in escolhidos for x in n.get("sinais", [])]
+    return any(_casa(m, t) for m in marcas) and any(_casa(x, t) for x in sinais)
 
 
 def expandir(chaves: list[str]) -> dict:
