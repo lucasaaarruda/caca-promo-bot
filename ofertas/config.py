@@ -60,6 +60,9 @@ class Config:
         self.desconto_maximo: int = int(filtros.get("desconto_maximo", 0))  # acima disso = suspeito; 0 = sem limite
         self.nota_minima: float = float(filtros.get("nota_minima", 0))
         self.vendas_minimas: int = int(filtros.get("vendas_minimas", 0))
+        # nichos sensíveis a falsificação (perfumes): "oficial" = só loja oficial/vendido pela Amazon;
+        # "oficial+lider" = também MercadoLíder Platinum (ML) e loja Indicada bem avaliada (Shopee)
+        self.lojas_confiaveis: str = str(filtros.get("lojas_confiaveis") or "oficial").strip().lower()
         self.preco_minimo: float = float(filtros.get("preco_minimo", 0))
         self.preco_maximo: float = float(filtros.get("preco_maximo", 0))
         self.palavras_bloqueadas: list[str] = [

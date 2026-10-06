@@ -7,6 +7,7 @@ os.environ["OFERTAS_DATA_DIR"] = tempfile.mkdtemp(prefix="ofertas-teste-")
 os.environ["TELEGRAM_CHAT_ID"] = ""
 
 import unittest
+from dataclasses import replace
 from datetime import datetime
 from unittest import mock
 
@@ -108,7 +109,7 @@ class Canais(unittest.TestCase):
         from ofertas.canais import Canal
         perfumes = Canal(id="perfumes", nome="P", chat_id="-1", nichos=["perfumes"])
         country = Canal(id="country", nome="C", chat_id="-2", nichos=["country"])
-        ofs = [oferta(id_="1", titulo="Perfume Asad Lattafa 100ml Eau de Parfum"),
+        ofs = [replace(oferta(id_="1", titulo="Perfume Asad Lattafa 100ml Eau de Parfum"), loja_confiavel=True),
                oferta(id_="2", titulo="Bota Country Masculina Couro Texana"),
                oferta(id_="3", titulo="Central Multimídia Universal")]
         with mock.patch.object(config, "desconto_minimo", 0), \
@@ -176,7 +177,7 @@ class CicloMultiCanal(unittest.TestCase):
             Oferta("amazon", "a1", "Kit Lavagem Automotiva Shampoo Cera", "https://www.amazon.com.br/dp/a1?tag=geral-20", preco=50, preco_original=100),
             Oferta("mercadolivre", "m1", "Central Multimídia 7 polegadas carro", "", url_produto="https://ml/m1", preco=50, preco_original=100),
             Oferta("amazon", "a2", "Perfume Masculino Eau de Parfum 100ml", "https://x/a2", preco=50, preco_original=100),
-            Oferta("mercadolivre", "m2", "Perfume Árabe Feminino 100ml", "", url_produto="https://ml/m2", preco=50, preco_original=100),
+            Oferta("mercadolivre", "m2", "Perfume Árabe Feminino 100ml", "", url_produto="https://ml/m2", preco=50, preco_original=100, loja_confiavel=True),
             Oferta("amazon", "a3", "Bota Country Texana Masculina", "https://x/a3", preco=50, preco_original=100),
             Oferta("amazon", "a4", "Bíblia Sagrada Letra Grande", "https://x/a4", preco=20, preco_original=100),
         ]
@@ -192,7 +193,7 @@ class CicloMultiCanal(unittest.TestCase):
                     o.url_afiliado = f"https://meli.la/{etiqueta}/{o.id_produto}"
 
         bot = FakeBot()
-        with mock.patch.object(config, "canais", canais), mock.patch.object(config, "ml_etiqueta", "padrao"), mock.patch.object(pipeline.db, "_DB", pathlib.Path(tempfile.mkdtemp()) / "t.db"),             mock.patch.object(config, "horario_ativo", ""),              mock.patch.object(config, "desconto_minimo", 25),              mock.patch.object(config, "max_posts_por_ciclo", 3),              mock.patch.object(config, "espacamento_segundos", 0),              mock.patch.object(pipeline, "coletar", return_value=brutas),              mock.patch.object(pipeline.mercadolivre, "gerar_links_por_etiqueta", side_effect=gerar),              mock.patch.object(pipeline.asyncio, "sleep", new=mock.AsyncMock()),              mock.patch.object(pipeline, "avisar_dono", new=mock.AsyncMock()):
+        with mock.patch.object(config, "canais", canais), mock.patch.object(config, "ml_etiqueta", "padrao"), mock.patch.object(pipeline.db, "_DB", pathlib.Path(tempfile.mkdtemp()) / "t.db"),             mock.patch.object(config, "horario_ativo", ""),              mock.patch.object(config, "desconto_minimo", 25),              mock.patch.object(config, "max_posts_por_ciclo", 3),              mock.patch.object(config, "espacamento_segundos", 0),              mock.patch.object(pipeline, "coletar", return_value=brutas),              mock.patch.object(pipeline.mercadolivre, "gerar_links_por_etiqueta", side_effect=gerar),              mock.patch.object(pipeline.asyncio, "sleep", new=mock.AsyncMock()),              mock.patch.object(pipeline.amazon, "vendedor_confiavel", return_value=True),              mock.patch.object(pipeline, "avisar_dono", new=mock.AsyncMock()):
             n = asyncio.run(pipeline.executar_ciclo(bot))
         self.bot = bot
         return n, bot.enviados
@@ -1037,6 +1038,74 @@ class AutomotivoGrupoDeReferencia(unittest.TestCase):
                   "Tacômetro Conta-giros Dragon 52mm", "Canhão de Espuma Snow Foam Gravity",
                   "Inversor de Energia Automotivo 400W 12V"]:
             self.assertTrue(relevante(t, ["automotivo"]), t)
+
+
+class PerfumeSoDeLojaConfiavel(unittest.TestCase):
+    def _canal(self):
+        from ofertas.canais import Canal
+        return Canal(id="perfumes", nome="P", chat_id="-1", nichos=["perfumes"])
+
+    def _filtrar(self, ofs):
+        with mock.patch.object(config, "desconto_minimo", 0), mock.patch.object(pipeline.db, "ja_postada", return_value=False):
+            return [o.id_produto for o in pipeline.filtrar(ofs, self._canal())]
+
+    def test_so_passa_vendedor_verificado(self):
+        t = "Perfume Lattafa Asad Eau de Parfum 100ml"
+        ofs = [Oferta("shopee", "ok", t + " a", "https://x", preco=90, preco_original=200, loja_confiavel=True),
+               Oferta("shopee", "comum", t + " b", "https://x", preco=90, preco_original=200, loja_confiavel=False),
+               Oferta("mercadolivre", "ml_ok", t + " c", "", preco=90, preco_original=200, loja_confiavel=True),
+               Oferta("mercadolivre", "ml_sem_info", t + " d", "", preco=90, preco_original=200),
+               Oferta("amazon", "amz", t + " e", "https://x", preco=90, preco_original=200)]
+        self.assertEqual(self._filtrar(ofs), ["ok", "ml_ok", "amz"])  # Amazon é confirmada na página, antes de postar
+
+    def test_outros_nichos_nao_exigem(self):
+        from ofertas.canais import Canal
+        o = Oferta("shopee", "x", "Bota Country Texana Couro", "https://x", preco=90, preco_original=200, loja_confiavel=False)
+        with mock.patch.object(config, "desconto_minimo", 0), mock.patch.object(pipeline.db, "ja_postada", return_value=False):
+            self.assertEqual(len(pipeline.filtrar([o], Canal(id="c", nome="C", chat_id="-2", nichos=["country"]))), 1)
+
+    def test_shopee_so_loja_oficial_mall(self):
+        from ofertas.sources import shopee
+        base = {"itemId": 1, "productName": "Perfume X", "priceMin": "100", "ratingStar": "4.9", "sales": 500, "offerLink": "l"}
+        self.assertTrue(shopee._node_para_oferta({**base, "shopType": [1]}).loja_confiavel)
+        self.assertFalse(shopee._node_para_oferta({**base, "shopType": [2]}).loja_confiavel)
+        self.assertFalse(shopee._node_para_oferta({**base, "shopType": []}).loja_confiavel)
+        with mock.patch.object(config, "lojas_confiaveis", "oficial+lider"):
+            self.assertTrue(shopee._node_para_oferta({**base, "shopType": [2]}).loja_confiavel)
+            self.assertFalse(shopee._node_para_oferta({**base, "shopType": [2], "sales": 20}).loja_confiavel)
+
+    def test_ml_escolhe_loja_oficial_em_perfume_mesmo_mais_cara(self):
+        from ofertas.sources import mercadolivre_api as api
+        itens = {"results": [
+            {"price": 40, "condition": "new", "category_id": "MLB6284", "seller_id": 1},
+            {"price": 120, "condition": "new", "category_id": "MLB6284", "seller_id": 2, "official_store_id": 99},
+            {"price": 90, "condition": "new", "category_id": "MLB6284", "seller_id": 3}]}
+        self.assertEqual(api._melhor_oferta(itens)["price"], 120)
+        outra = {"results": [{**i, "category_id": "MLB1648"} for i in itens["results"]]}
+        self.assertEqual(api._melhor_oferta(outra)["price"], 40)  # fora de perfumes continua o mais barato
+
+    def test_sinais_de_falsificacao_no_titulo(self):
+        from ofertas.nichos import relevante
+        for t in ["Perfume Replica Importado Eau de Parfum 100ml", "Perfume Importado AAA Primeira Linha 100ml"]:
+            self.assertFalse(relevante(t, ["perfumes"]), t)
+
+
+class AutomotivoSemFerramentasGerais(unittest.TestCase):
+    def test_ferramenta_geral_e_do_canal_de_ferramentas(self):
+        from ofertas.nichos import relevante
+        for t in ["40 Peças Jogo De Chave Catraca Caixa De Ferramentas", "Parafusadeira Furadeira a Bateria 12V",
+                  "Kit de Ferramentas Elétricas 128V"]:
+            self.assertFalse(relevante(t, ["automotivo"]), t)
+            self.assertTrue(relevante(t, ["ferramentas"]), t)
+        for t in ["Macaco Hidraulico Jacare 2 Toneladas", "Chave de Roda Cruz Automotivo", "Kit Ferramentas Automotivas Reparo"]:
+            self.assertTrue(relevante(t, ["automotivo"]), t)
+
+    def test_amazon_vendido_pela_propria_amazon(self):
+        from ofertas.sources.amazon import _RE_VENDIDO_AMAZON as R
+        for t in ["Enviado / Vendido Amazon.com.br Amazon.com.br", "Vendido por Amazon"]:
+            self.assertTrue(R.search(t), t)
+        for t in ["Enviado / Vendido WebContinental", "Enviado por Amazon Vendido por LojaX", "Vendido por Amazon Export"]:
+            self.assertFalse(R.search(t), t)
 
 
 class BloqueioDoML(unittest.TestCase):

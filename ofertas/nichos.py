@@ -87,8 +87,8 @@ NICHOS: dict[str, dict] = {
     },
     "automotivo": {
         "emoji": "🚗", "nome": "Automotivo",
-        "ml_buscas": ["boina de polimento", "lâmpada led h4", "lâmpada led h7", "bateria 20v ferramentas",
-                      "kit ferramentas parafusadeira", "bicos lavadora alta pressão", "protetor solar para-brisa",
+        "ml_buscas": ["boina de polimento", "lâmpada led h4", "lâmpada led h7", "bateria automotiva",
+                      "bicos lavadora alta pressão", "protetor solar para-brisa",
                       "selante de pneu", "cera automotiva", "aditivo diesel", "abafador esportivo", "kit detalhamento automotivo",
                       "espuma ativa lava jato", "aromatizante automotivo", "capa de volante", "carregador veicular",
                       "tweeter jbl selenium", "lavadora alta pressão wap", "adaptador engate rápido karcher", "shampoo automotivo",
@@ -134,8 +134,7 @@ NICHOS: dict[str, dict] = {
                    "shampoo automotivo", "lavagem", "lavadora de alta pressao", "lava jato", "alta pressao",
                    "pano de microfibra", "aspirador automotivo", "aspirador de po portatil", "vonixx",
                    "cadeira para auto", "macaco hidraulico", "chave de roda", "chave de impacto",
-                   "jogo de chaves", "ferramentas", "kit de ferramentas", "caixa de ferramentas",
-                   "parafusadeira", "furadeira", "estepe", "triangulo", "extintor", "palheta", "sensor de re",
+                   "estepe", "triangulo", "extintor", "palheta", "sensor de re",
                    "camera de re", "dashcam", "camera veicular", "suporte celular carro", "suporte veicular",
                    "motoqueiro", "motoboy", "motociclista", "bebe conforto", "cadeirinha", "escapamento",
                    "triaxial", "subwoofer automotivo", "amortecedor", "pastilha de freio", "disco de freio",
@@ -146,7 +145,7 @@ NICHOS: dict[str, dict] = {
                    "boina", "boinas", "politriz", "lampada h4", "lampada h7", "led h4", "led h7", "farol de milha",
                    "capa de volante", "capa de banco", "quebra-sol", "protetor solar para-brisa", "bicos para lavadora",
                    "engate rapido", "selante", "desengraxante", "aromatizante", "abafador", "ponteira", "catalisador",
-                   "pastilha", "bateria 20v", "parafusadeira", "chave de impacto", "lavadora de pressao",
+                   "pastilha", "lavadora de pressao",
                    "tweeter", "super tweeter", "selenium", "pneu aro", "kit lavagem", "carnauba",
                    # vistos em grupos de referência: marcas de estética/química automotiva
                    "proauto", "liqui moly", "vintex", "alumax", "restaurax", "caraiva", "easytech", "meguiars",
@@ -256,7 +255,11 @@ NICHOS: dict[str, dict] = {
                     "camiseta", "camisa", "cueca", "jeans", "bermuda", "blusa", "tenis", "relogio", "oculos", "bolsa",
                     "carteira", "batom", "base", "po compacto", "rimel", "sombra", "esmalte", "shampoo",
                     "condicionador", "creme", "esfoliante", "protetor solar", "maquiagem", "desodorante antitranspirante",
-                    "antitranspirante", "roll on"],
+                    "antitranspirante", "roll on",
+                    # sinais clássicos de falsificação/imitação anunciada
+                    "replica", "falsificado", "falsificada", "imitacao", "aaa", "primeira linha", "paralelo"],
+        # falsificação é comum em perfume: só entra oferta de vendedor verificável (loja oficial)
+        "exigir_loja_confiavel": True,
         "desconto_sugerido": 15,
     },
     "ferramentas": {
@@ -391,6 +394,11 @@ def ler_selecao() -> list[str]:
 def salvar_selecao(chaves: list[str]) -> None:
     validas = [c for c in chaves if c in NICHOS]
     ARQ_SELECAO.write_text(json.dumps(validas), encoding="utf-8")
+
+
+def exige_loja_confiavel(chaves: list[str]) -> bool:
+    """Algum nicho do canal só aceita vendedor verificável (ex.: perfumes, onde há muita falsificação)?"""
+    return any(NICHOS.get(c, {}).get("exigir_loja_confiavel") for c in chaves)
 
 
 def _norm(texto: str) -> str:

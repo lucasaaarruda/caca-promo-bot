@@ -51,7 +51,7 @@ def _chamar(query: str) -> dict:
 
 
 _CAMPOS = ("itemId productName priceMin priceMax priceDiscountRate imageUrl "
-           "offerLink productLink sales ratingStar shopName")
+           "offerLink productLink sales ratingStar shopName shopType")
 
 
 def _float(v) -> float | None:
@@ -66,6 +66,18 @@ def _int(v) -> int | None:
         return int(v)
     except (TypeError, ValueError):
         return None
+
+
+def _loja(n: dict) -> tuple[bool, str | None]:
+    """shopType da Open API: 1 = Shopee Mall (loja oficial), 2/4 = lojas Indicadas. Só a oficial é verificada;
+    no modo "oficial+lider" a Indicada também vale, se tiver nota e vendas altas."""
+    tipos = n.get("shopType") or []
+    if 1 in tipos:
+        return True, "🏪 Loja oficial"
+    if config.lojas_confiaveis == "oficial+lider" and (2 in tipos or 4 in tipos):
+        if (_float(n.get("ratingStar")) or 0) >= 4.7 and (_int(n.get("sales")) or 0) >= 100:
+            return True, "🏅 Loja indicada"
+    return False, None
 
 
 def _node_para_oferta(n: dict) -> Oferta:
@@ -83,6 +95,9 @@ def _node_para_oferta(n: dict) -> Oferta:
             pass
     if n.get("sales"):
         partes.append(f"{n['sales']} vendidos")
+    confiavel, selo = _loja(n)
+    if selo:
+        partes.append(selo)
 
     return Oferta(
         plataforma="shopee",
@@ -97,6 +112,7 @@ def _node_para_oferta(n: dict) -> Oferta:
         extra=" · ".join(partes) or None,
         nota=_float(n.get("ratingStar")),
         vendas=_int(n.get("sales")),
+        loja_confiavel=confiavel,
     )
 
 

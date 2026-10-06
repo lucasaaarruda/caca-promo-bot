@@ -372,6 +372,27 @@ def converter(url: str) -> Oferta:
     )
 
 
+_RE_VENDIDO_AMAZON = re.compile(r"vendido\s+(?:por\s+|pela\s+)?amazon(?:\.com\.br)?(?!\w)(?!\s+(?:export|global|warehouse|resale))", re.I)
+
+
+def vendedor_confiavel(o: Oferta) -> bool:
+    """A página do produto diz que é vendido (e enviado) pela própria Amazon? Usado em perfumes, onde há
+    muita falsificação em vendedores terceiros. Sem conseguir ler a página, a resposta é não."""
+    url = o.url_produto or f"https://www.amazon.com.br/dp/{o.id_produto}"
+    try:
+        r = _sessao().get(url, timeout=25)
+        if r.status_code != 200 or _bloqueado(r.text):
+            return False
+        soup = BeautifulSoup(r.text, "lxml")
+        blocos = soup.select("#merchant-info, #tabular-buybox, #fulfillerInfoFeature_feature_div, "
+                             "#merchantInfoFeature_feature_div, #sellerProfileTriggerId")
+        texto = " ".join(b.get_text(" ", strip=True) for b in blocos)
+        return bool(_RE_VENDIDO_AMAZON.search(texto))
+    except Exception as e:
+        log.warning("Não consegui verificar o vendedor na Amazon (%s): %s", o.id_produto, e)
+        return False
+
+
 def _detalhes(url: str):
     """Scraping leve da página do produto; se a Amazon bloquear, segue sem os dados."""
     try:

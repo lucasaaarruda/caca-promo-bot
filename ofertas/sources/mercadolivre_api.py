@@ -120,11 +120,48 @@ def oferta_de_item(d: dict) -> Oferta | None:
     )
 
 
+# categorias onde falsificação é comum: ali só vale vendedor verificável (e escolhemos a melhor oferta entre eles)
+CATEGORIAS_SENSIVEIS = {"MLB6284"}  # Perfumes
+_TTL_VENDEDOR = 12 * 3600
+_vendedores: dict[int, tuple[float, bool]] = {}
+
+
+def _vendedor_lider(seller_id) -> bool:
+    """MercadoLíder Platinum com reputação verde (cache de 12h)."""
+    agora = time.time()
+    acerto = _vendedores.get(seller_id)
+    if acerto and agora - acerto[0] < _TTL_VENDEDOR:
+        return acerto[1]
+    u = _get_ou_none(f"/users/{seller_id}")
+    rep = (u or {}).get("seller_reputation") or {}
+    ok = rep.get("power_seller_status") == "platinum" and str(rep.get("level_id", "")).startswith("5")
+    _vendedores[seller_id] = (agora, ok)
+    time.sleep(PAUSA)
+    return ok
+
+
+def _loja_ml(item: dict, consultar: bool = True) -> tuple[bool, str | None]:
+    """(vendedor verificado?, selo). Loja oficial vem no próprio item; MercadoLíder exige consultar o vendedor."""
+    if item.get("official_store_id"):
+        return True, "🏪 Loja oficial"
+    if consultar and config.lojas_confiaveis == "oficial+lider" and item.get("seller_id")             and _vendedor_lider(item["seller_id"]):
+        return True, "🏅 MercadoLíder Platinum"
+    return False, None
+
+
 def _melhor_oferta(itens: dict | None) -> dict | None:
-    """Das ofertas de /products/{id}/items, a de menor preço entre as novas."""
+    """Das ofertas de /products/{id}/items, a de menor preço entre as novas. Em categoria sensível
+    (perfumes), a de menor preço entre os vendedores verificados, se houver."""
     validas = [i for i in (itens or {}).get("results") or []
                if isinstance(i, dict) and i.get("price") and i.get("condition", "new") == "new"]
-    return min(validas, key=lambda i: float(i["price"])) if validas else None
+    if not validas:
+        return None
+    barato = min(validas, key=lambda i: float(i["price"]))
+    if barato.get("category_id") in CATEGORIAS_SENSIVEIS:
+        confiaveis = [i for i in validas if _loja_ml(i)[0]]
+        if confiaveis:
+            return min(confiaveis, key=lambda i: float(i["price"]))
+    return barato
 
 
 def oferta_de_catalogo(prod: dict, item: dict, categoria: str | None = None, campeao: bool = False) -> Oferta | None:
@@ -146,8 +183,10 @@ def oferta_de_catalogo(prod: dict, item: dict, categoria: str | None = None, cam
         partes.append("🔥 Oferta do dia")
     if (item.get("shipping") or {}).get("free_shipping"):
         partes.append("🚚 Frete grátis")
-    if item.get("official_store_id"):
-        partes.append("🏪 Loja oficial")
+    sensivel = (categoria or item.get("category_id")) in CATEGORIAS_SENSIVEIS or item.get("category_id") in CATEGORIAS_SENSIVEIS
+    confiavel, selo = _loja_ml(item, consultar=sensivel)
+    if selo:
+        partes.append(selo)
 
     return Oferta(
         plataforma="mercadolivre",
@@ -161,6 +200,8 @@ def oferta_de_catalogo(prod: dict, item: dict, categoria: str | None = None, cam
         extra=" · ".join(partes) or None,
         categoria=categoria or item.get("category_id"),
         mais_vendido=campeao,
+        # só afirma "não verificado" onde importa (perfumes); nas demais categorias fica "não informado"
+        loja_confiavel=True if confiavel else (False if sensivel else None),
     )
 
 

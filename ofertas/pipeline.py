@@ -10,7 +10,7 @@ from telegram.error import NetworkError, TimedOut
 
 from . import db
 from .canais import Canal
-from .nichos import relevante
+from .nichos import exige_loja_confiavel, relevante
 from .config import config, dentro_do_horario
 from .models import Oferta
 from .sources import amazon, mercadolivre, mercadolivre_api, shopee
@@ -81,6 +81,7 @@ def filtrar(ofertas: list[Oferta], canal: Canal | None = None) -> list[Oferta]:
     palavras = canal.palavras if canal else []
     excluir = canal.excluir if canal else []
     desconto_min = canal.desconto_minimo if canal and canal.desconto_minimo is not None else config.desconto_minimo
+    exige_loja = exige_loja_confiavel(nichos)
     recentes = {_chave_similar(t) for t in db.titulos_recentes(canal_id, DIAS_SIMILAR)}
     aprovadas = []
     for o in ofertas:
@@ -88,6 +89,8 @@ def filtrar(ofertas: list[Oferta], canal: Canal | None = None) -> list[Oferta]:
             continue
         if not relevante(o.titulo, nichos, palavras, excluir, o.categoria):
             continue
+        if exige_loja and not _loja_aceita(o):
+            continue  # nicho sensível a falsificação: só vendedor verificado
         if _chave_similar(o.titulo) in recentes:
             continue  # variação (cor/tamanho) de algo que este canal já postou há pouco
         if db.ja_postada(f"{canal_id}|{o.uid}", config.nao_repetir_dias):
@@ -112,6 +115,11 @@ def filtrar(ofertas: list[Oferta], canal: Canal | None = None) -> list[Oferta]:
             continue
         aprovadas.append(o)
     return aprovadas
+
+
+def _loja_aceita(o: Oferta) -> bool:
+    """Vendedor verificado. A Amazon só se confirma na página do produto, feito logo antes de postar."""
+    return o.loja_confiavel is True or (o.loja_confiavel is None and o.plataforma == "amazon")
 
 
 def _muito_vendido(o: Oferta) -> bool:
@@ -275,6 +283,11 @@ async def executar_ciclo(bot: Bot) -> int:
             if not link:
                 log.warning("Sem link de afiliado, pulando: %s", o.titulo[:60])
                 continue
+            if exige_loja_confiavel(c.nichos) and o.loja_confiavel is not True:
+                if not await asyncio.to_thread(amazon.vendedor_confiavel, o):
+                    log.info("Amazon: vendedor não confirmado como Amazon, pulando (%s): %s", c.nome, o.titulo[:60])
+                    continue
+                o = replace(o, loja_confiavel=True, extra=" · ".join(x for x in (o.extra, "📦 Vendido pela Amazon") if x))
             if postadas:
                 await asyncio.sleep(_pausa(base_pausa))  # ritmo entre posts: não despeja tudo de uma vez
             chave = f"{c.id}|{o.uid}"

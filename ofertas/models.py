@@ -18,6 +18,7 @@ class Oferta:
     cupom: str | None = None   # código de cupom a digitar (informado por você no conversor)
     mais_vendido: bool = False # veio da lista de mais vendidos da categoria (API do ML)
     categoria: str | None = None  # categoria de origem no ML (id), quando a fonte informa
+    loja_confiavel: bool | None = None  # vendedor verificado (loja oficial etc.); None = a fonte não informa
 
     @property
     def uid(self) -> str:
