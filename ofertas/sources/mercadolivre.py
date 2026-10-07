@@ -73,12 +73,13 @@ def _categorias_da_rodada() -> dict[str, str]:
     return dict((todas + todas)[inicio:inicio + por_rodada])
 
 
-def buscar_ofertas() -> list[Oferta]:
-    """Página de ofertas do ML, filtrada pelas categorias do config (ofertas?category=MLB...)."""
+_bloqueio_ate = 0.0  # enquanto o ML barrar as requisições simples, lê as páginas pelo navegador (até esta hora)
+RETENTAR_REQUISICAO_H = 6
+
+
+def _pedidos(categorias: dict[str, str]):
+    """(id, nome, params) de cada página de ofertas a ler."""
     paginas = max(1, int(config.fonte_ml.get("paginas", 1)))
-    categorias = _categorias_da_rodada()
-    s = sessao()
-    ofertas: dict[str, Oferta] = {}
     for cat_id, nome in categorias.items():
         for pagina in range(1, paginas + 1):
             params = {}
@@ -86,19 +87,71 @@ def buscar_ofertas() -> list[Oferta]:
                 params["category"] = cat_id
             if pagina > 1:
                 params["page"] = pagina
-            r = s.get(URL_OFERTAS, params=params or None, timeout=30)
-            r.raise_for_status()
-            if "account-verification" in r.url:
-                # insistir só piora o bloqueio: para a rodada e deixa a API oficial cobrir
-                raise BloqueioML("Mercado Livre bloqueou o acesso às ofertas (verificação de tráfego suspeito)")
-            achadas = _parse_pagina(r.text)
-            for o in achadas:
-                o.categoria = cat_id or None
-                ofertas.setdefault(o.id_produto, o)
-            log.info("Mercado Livre %s: %d ofertas", nome, len(achadas))
-            time.sleep(1)
-    log.info("Mercado Livre: %d ofertas coletadas", len(ofertas))
+            yield cat_id, nome, params
+
+
+def _juntar(ofertas: dict[str, Oferta], achadas: list[Oferta], cat_id: str, nome: str) -> None:
+    for o in achadas:
+        o.categoria = cat_id or None
+        ofertas.setdefault(o.id_produto, o)
+    log.info("Mercado Livre %s: %d ofertas", nome, len(achadas))
+
+
+def _buscar_por_requisicao(categorias: dict[str, str]) -> list[Oferta]:
+    s = sessao()
+    ofertas: dict[str, Oferta] = {}
+    for cat_id, nome, params in _pedidos(categorias):
+        r = s.get(URL_OFERTAS, params=params or None, timeout=30)
+        r.raise_for_status()
+        if "account-verification" in r.url:
+            # insistir só piora o bloqueio: para a rodada
+            raise BloqueioML("Mercado Livre bloqueou o acesso às ofertas (verificação de tráfego suspeito)")
+        _juntar(ofertas, _parse_pagina(r.text), cat_id, nome)
+        time.sleep(1)
     return list(ofertas.values())
+
+
+def _buscar_pelo_navegador(categorias: dict[str, str]) -> list[Oferta]:
+    """Mesmas páginas, lidas pelo Chrome com a sua sessão do ML (o que o linkbuilder já usa): o ML aceita
+    esse acesso mesmo quando barra as requisições simples."""
+    from urllib.parse import urlencode
+    from playwright.sync_api import sync_playwright
+
+    ofertas: dict[str, Oferta] = {}
+    with sync_playwright() as pw:
+        ctx = _abrir_contexto(pw, headless=True)
+        try:
+            page = ctx.pages[0] if ctx.pages else ctx.new_page()
+            for cat_id, nome, params in _pedidos(categorias):
+                url = URL_OFERTAS + ("?" + urlencode(params) if params else "")
+                page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                page.wait_for_timeout(1200)
+                if "account-verification" in page.url:
+                    raise BloqueioML("Mercado Livre bloqueou as ofertas até pelo navegador (verificação de tráfego suspeito)")
+                _juntar(ofertas, _parse_pagina(page.content()), cat_id, nome)
+                time.sleep(1)
+        finally:
+            ctx.close()
+    return list(ofertas.values())
+
+
+def buscar_ofertas() -> list[Oferta]:
+    """Página de ofertas do ML, filtrada pelas categorias do config (ofertas?category=MLB...)."""
+    global _bloqueio_ate
+    categorias = _categorias_da_rodada()
+    if tem_sessao() and time.time() < _bloqueio_ate:
+        ofertas = _buscar_pelo_navegador(categorias)
+    else:
+        try:
+            ofertas = _buscar_por_requisicao(categorias)
+        except BloqueioML as e:
+            if not tem_sessao():
+                raise
+            log.warning("%s — lendo pelo navegador", e)
+            _bloqueio_ate = time.time() + RETENTAR_REQUISICAO_H * 3600
+            ofertas = _buscar_pelo_navegador(categorias)
+    log.info("Mercado Livre: %d ofertas coletadas", len(ofertas))
+    return ofertas
 
 
 def _preco_de(card, seletor_base: str) -> float | None:

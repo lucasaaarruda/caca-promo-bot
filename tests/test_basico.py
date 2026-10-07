@@ -1114,10 +1114,22 @@ class BloqueioDoML(unittest.TestCase):
         resp = mock.Mock(url="https://www.mercadolivre.com.br/gz/account-verification?go=x", text="")
         sess = mock.Mock()
         sess.get.return_value = resp
-        with mock.patch.object(mercadolivre, "sessao", return_value=sess),                 mock.patch.object(mercadolivre, "_categorias_da_rodada", return_value={"A": "a", "B": "b"}):
+        with mock.patch.object(mercadolivre, "sessao", return_value=sess),                 mock.patch.object(mercadolivre, "tem_sessao", return_value=False),                 mock.patch.object(mercadolivre, "_categorias_da_rodada", return_value={"A": "a", "B": "b"}):
             with self.assertRaises(mercadolivre.BloqueioML):
                 mercadolivre.buscar_ofertas()
         self.assertEqual(sess.get.call_count, 1)  # não insiste nas outras categorias
+
+    def test_bloqueio_cai_para_o_navegador_e_lembra_por_um_tempo(self):
+        from ofertas.sources import mercadolivre
+        resp = mock.Mock(url="https://www.mercadolivre.com.br/gz/account-verification?go=x", text="")
+        sess = mock.Mock()
+        sess.get.return_value = resp
+        achada = Oferta("mercadolivre", "m1", "Perfume X", "", preco=10)
+        with mock.patch.object(mercadolivre, "sessao", return_value=sess),                 mock.patch.object(mercadolivre, "tem_sessao", return_value=True),                 mock.patch.object(mercadolivre, "_bloqueio_ate", 0.0),                 mock.patch.object(mercadolivre, "_categorias_da_rodada", return_value={"A": "a"}),                 mock.patch.object(mercadolivre, "_buscar_pelo_navegador", return_value=[achada]) as nav:
+            self.assertEqual(mercadolivre.buscar_ofertas(), [achada])   # 1ª rodada: tenta, é barrado, usa o navegador
+            self.assertEqual(mercadolivre.buscar_ofertas(), [achada])   # 2ª: vai direto ao navegador
+        self.assertEqual(sess.get.call_count, 1)
+        self.assertEqual(nav.call_count, 2)
 
 
 if __name__ == "__main__":
