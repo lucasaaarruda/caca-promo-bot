@@ -21,8 +21,13 @@ def _conn() -> sqlite3.Connection:
         " preco REAL,"
         " postada_em TEXT)"
     )
-    if "desconto" not in {r[1] for r in c.execute("PRAGMA table_info(postadas)")}:
+    colunas = {r[1] for r in c.execute("PRAGMA table_info(postadas)")}
+    if "desconto" not in colunas:
         c.execute("ALTER TABLE postadas ADD COLUMN desconto INTEGER")  # bancos criados antes do relatório
+    if "preco_original" not in colunas:
+        c.execute("ALTER TABLE postadas ADD COLUMN preco_original REAL")
+    if "loja_oficial" not in colunas:
+        c.execute("ALTER TABLE postadas ADD COLUMN loja_oficial INTEGER")  # 1 verificado, 0 comum, NULL não informado
     c.execute("CREATE TABLE IF NOT EXISTS ciclos (ts TEXT, coletadas INTEGER, postadas INTEGER, detalhe TEXT)")
     c.execute("CREATE TABLE IF NOT EXISTS eventos (ts TEXT, tipo TEXT, detalhe TEXT)")
     c.execute("CREATE TABLE IF NOT EXISTS precos (uid TEXT, ts TEXT, preco REAL)")
@@ -59,10 +64,11 @@ def ja_postada(uid: str, dentro_de_dias: int) -> bool:
 def registrar(oferta: Oferta, canal_id: str = "principal") -> None:
     with closing(_conn()) as c, c:
         c.execute(
-            "INSERT OR REPLACE INTO postadas (uid, plataforma, titulo, preco, postada_em, desconto)"
-            " VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT OR REPLACE INTO postadas (uid, plataforma, titulo, preco, postada_em, desconto,"
+            " preco_original, loja_oficial) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (f"{canal_id}|{oferta.uid}", oferta.plataforma, oferta.titulo, oferta.preco, _agora(),
-             oferta.desconto),
+             oferta.desconto, oferta.preco_original,
+             None if oferta.loja_confiavel is None else int(oferta.loja_confiavel)),
         )
 
 
@@ -152,6 +158,8 @@ def resumo(desde: dt.datetime) -> dict:
     boas: dict[str, list[int]] = {}
     for _, _, detalhe in ciclos:
         for canal, v in json.loads(detalhe or "{}").items():
+            if canal.startswith("_"):
+                continue  # "_geral": dados do ciclo inteiro, usados no relatório completo
             boas.setdefault(canal, []).append(v.get("boas", 0))
 
     return {

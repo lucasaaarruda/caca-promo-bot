@@ -4,6 +4,7 @@ import random
 import re
 import time
 import unicodedata
+from collections import Counter
 from dataclasses import replace
 
 from telegram import Bot
@@ -75,8 +76,13 @@ def coletar() -> list[Oferta]:
     return todas
 
 
-def filtrar(ofertas: list[Oferta], canal: Canal | None = None) -> list[Oferta]:
-    """Ofertas que servem para o canal: relevantes ao nicho, não repetidas, com desconto e preço ok."""
+def filtrar(ofertas: list[Oferta], canal: Canal | None = None, motivos: Counter | None = None) -> list[Oferta]:
+    """Ofertas que servem para o canal: relevantes ao nicho, não repetidas, com desconto e preço ok.
+    `motivos` (opcional) conta por que cada oferta foi descartada, para o relatório."""
+    def no(motivo: str) -> None:
+        if motivos is not None:
+            motivos[motivo] += 1
+
     canal_id = canal.id if canal else "principal"
     nichos = canal.nichos if canal else []
     palavras = canal.palavras if canal else []
@@ -90,30 +96,41 @@ def filtrar(ofertas: list[Oferta], canal: Canal | None = None) -> list[Oferta]:
         if not o.titulo:
             continue
         if not relevante(o.titulo, nichos, palavras, excluir, o.categoria):
+            no("fora_do_nicho")
             continue
         if exige_loja and not _loja_aceita(o):
-            continue  # nicho sensível a falsificação: só vendedor verificado
+            no("vendedor_nao_verificado")
+            continue  # só vendedor verificado (loja oficial)
         if _repetido(_nucleo(o.titulo), o.preco, recentes):
+            no("mesmo_produto_ja_postado")
             continue  # o mesmo produto (outro vendedor, cor, tamanho) que este canal já postou há pouco
         if db.ja_postada(f"{canal_id}|{o.uid}", config.nao_repetir_dias):
+            no("ja_postado")
             continue
         if desconto_min and (o.desconto or 0) < desconto_min:
             if not (canal and canal.aceitar_sem_desconto and not o.desconto and _muito_vendido(o)):
+                no("desconto_baixo")
                 continue
         if config.desconto_maximo and (o.desconto or 0) > config.desconto_maximo:
+            no("desconto_suspeito")
             continue  # desconto irreal: quase sempre preço "de" inflado
         # nota/vendas desconhecidas (a fonte não informa) não reprovam; só as conhecidas e baixas
         if config.nota_minima and o.nota is not None and o.nota < config.nota_minima:
+            no("nota_baixa")
             continue
         if config.vendas_minimas and o.vendas is not None and o.vendas < config.vendas_minimas:
+            no("poucas_vendas")
             continue
         if o.preco is not None:
             if config.preco_minimo and o.preco < config.preco_minimo:
+                no("preco_fora_da_faixa")
                 continue
             if config.preco_maximo and o.preco > config.preco_maximo:
+                no("preco_fora_da_faixa")
                 continue
         titulo = o.titulo.lower()
         if any(p in titulo for p in config.palavras_bloqueadas):
+            no("palavra_bloqueada")
             continue
         aprovadas.append(o)
     return aprovadas
@@ -287,7 +304,8 @@ async def executar_ciclo(bot: Bot) -> int:
                                "O bot segue com a API oficial do ML, Shopee e Amazon. Costuma liberar sozinho; "
                                "se durar dias, abra mercadolivre.com.br/ofertas no navegador e resolva a verificação.",
                           repetir_apos_h=12)
-    boas = {c.id: filtrar(brutas, c) for c in canais}
+    motivos = {c.id: Counter() for c in canais}
+    boas = {c.id: filtrar(brutas, c, motivos[c.id]) for c in canais}
     total_boas = {c.id: len(boas[c.id]) for c in canais}
 
     def _etiqueta(c: Canal) -> str:
@@ -355,6 +373,7 @@ async def executar_ciclo(bot: Bot) -> int:
             if _exige_loja(c) and o.loja_confiavel is not True:
                 if not await asyncio.to_thread(amazon.vendedor_confiavel, o):
                     log.info("Amazon: vendedor não confirmado como Amazon, pulando (%s): %s", c.nome, o.titulo[:60])
+                    motivos[c.id]["amazon_vendedor_nao_confirmado"] += 1
                     continue
                 o = replace(o, loja_confiavel=True, extra=" · ".join(x for x in (o.extra, "📦 Vendido pela Amazon") if x))
             if postadas:
@@ -385,8 +404,11 @@ async def executar_ciclo(bot: Bot) -> int:
             chaves_postadas[c.id].append((_nucleo(o.titulo), o.preco))
 
     sobrou = {c.id: len(boas[c.id]) for c in canais}
-    db.registrar_ciclo(len(brutas), postadas,
-                       {c.id: {"boas": total_boas[c.id], "postadas": por_canal[c.id]} for c in canais})
+    detalhe = {c.id: {"boas": total_boas[c.id], "postadas": por_canal[c.id], "descartes": dict(motivos[c.id])}
+               for c in canais}
+    detalhe["_geral"] = {"por_plataforma": dict(Counter(o.plataforma for o in brutas)),
+                         "ml_so_pela_api": bool(_estado["ml_bloqueado"])}
+    db.registrar_ciclo(len(brutas), postadas, detalhe)
     log.info("Ciclo: %d coletadas | %s | %d postadas%s", len(brutas),
              ", ".join(f"{c.nome}: {total_boas[c.id]} boas, {por_canal[c.id]} postadas" for c in canais), postadas,
              " | ficaram para a próxima rodada: " + ", ".join(f"{k}={v}" for k, v in sobrou.items() if v)

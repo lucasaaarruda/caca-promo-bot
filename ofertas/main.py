@@ -128,6 +128,12 @@ def cmd_postar(args):
     asyncio.run(go())
 
 
+def cmd_relatorio(args):
+    from . import relatorio_completo
+    md, csv_ = relatorio_completo.gerar(args.dias)
+    print(f"Relatório: {md}\nPosts (planilha): {csv_}")
+
+
 def cmd_painel(_):
     from .painel import painel
     painel()
@@ -201,6 +207,9 @@ def main():
 
     sub.add_parser("painel", help="abre o painel de controle gráfico no navegador").set_defaults(fn=cmd_painel)
     sub.add_parser("check", help="mostra o que falta configurar").set_defaults(fn=cmd_check)
+    pr = sub.add_parser("relatorio", help="gera o relatório completo (data/relatorios/): .md + .csv dos posts")
+    pr.add_argument("--dias", type=int, default=1, help="quantos dias incluir (padrão: só hoje)")
+    pr.set_defaults(fn=cmd_relatorio)
     sub.add_parser("run", help="roda o bot (conversor no privado + ciclos automáticos)").set_defaults(fn=cmd_run)
     sub.add_parser("ciclo", help="roda um único ciclo de busca e postagem").set_defaults(fn=cmd_ciclo)
 

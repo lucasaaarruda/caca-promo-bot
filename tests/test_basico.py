@@ -1202,6 +1202,32 @@ class FerramentasNaoPegaManicure(unittest.TestCase):
         self.assertTrue(relevante("Alicate Universal 8 Polegadas Isolado", ["ferramentas"]))
 
 
+class RelatorioCompleto(unittest.TestCase):
+    def test_gera_markdown_e_csv_com_motivos_de_descarte(self):
+        import datetime as dt
+        from collections import Counter
+        from ofertas import relatorio_completo
+        from ofertas.canais import Canal
+        canal = Canal(id="ferr", nome="Ferr", chat_id="-1", nichos=["ferramentas"])
+        ofs = [Oferta("shopee", "a", "Alicate Universal 8 Polegadas Isolado", "https://x", preco=20, preco_original=80, loja_confiavel=True),
+               Oferta("shopee", "b", "Martelo de Unha 27mm Cabo Fibra", "https://x", preco=20, preco_original=80, loja_confiavel=False),
+               Oferta("shopee", "c", "Camiseta Preta Lisa", "https://x", preco=20, preco_original=80, loja_confiavel=True)]
+        motivos = Counter()
+        with mock.patch.object(pipeline.db, "_DB", pathlib.Path(tempfile.mkdtemp()) / "rel.db"),                 mock.patch.object(config, "canais", [canal]), mock.patch.object(config, "exigir_loja_oficial", True),                 mock.patch.object(config, "desconto_minimo", 0):
+            aprovadas = pipeline.filtrar(ofs, canal, motivos)
+            self.assertEqual([o.id_produto for o in aprovadas], ["a"])
+            self.assertEqual(motivos["vendedor_nao_verificado"], 1)
+            self.assertEqual(motivos["fora_do_nicho"], 1)
+            pipeline.db.registrar(aprovadas[0], "ferr")
+            pipeline.db.registrar_ciclo(3, 1, {"ferr": {"boas": 1, "postadas": 1, "descartes": dict(motivos)},
+                                               "_geral": {"por_plataforma": {"shopee": 3}, "ml_so_pela_api": False}})
+            texto, linhas = relatorio_completo.montar(dt.datetime.now() - dt.timedelta(hours=1), dt.datetime.now())
+        self.assertIn("vendedor não verificado", texto)
+        self.assertIn("Alicate Universal", texto)
+        self.assertEqual(len(linhas), 1)
+        self.assertEqual(linhas[0][-1], "sim")   # post com vendedor verificado
+
+
 class BloqueioDoML(unittest.TestCase):
     def test_pagina_de_verificacao_para_a_rodada(self):
         from ofertas.sources import mercadolivre

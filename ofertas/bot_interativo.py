@@ -11,7 +11,7 @@ from telegram.error import NetworkError, TimedOut
 from telegram.ext import (Application, CallbackQueryHandler, ChatMemberHandler, CommandHandler,
                           ContextTypes, MessageHandler, filters)
 
-from . import db, pipeline, relatorio
+from . import db, pipeline, relatorio, relatorio_completo
 from .config import config
 from .models import Oferta
 from .sources import detectar_fonte
@@ -71,8 +71,33 @@ async def _cmd_relatorio(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(relatorio.relatorio_do_dia())
 
 
+async def _enviar_relatorio_completo(bot, chat_id, dias: int = 1) -> None:
+    """Gera o relatório completo (.md + .csv) e manda os dois arquivos no privado do dono."""
+    try:
+        md, csv_ = await asyncio.to_thread(relatorio_completo.gerar, dias)
+        for arq in (md, csv_):
+            with open(arq, "rb") as f:
+                await bot.send_document(chat_id, f, filename=arq.name)
+    except Exception as e:
+        log.warning("Não consegui enviar o relatório completo: %s", e)
+
+
+async def _cmd_relatorio_completo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """/relatoriocompleto [dias]: relatório detalhado de hoje (ou dos últimos N dias)."""
+    if not _e_dono(update):
+        return
+    try:
+        dias = max(1, min(60, int(ctx.args[0]))) if ctx.args else 1
+    except ValueError:
+        dias = 1
+    await update.message.reply_text(f"📑 Gerando o relatório completo ({'hoje' if dias == 1 else f'últimos {dias} dias'})...")
+    await _enviar_relatorio_completo(ctx.bot, update.effective_chat.id, dias)
+
+
 async def _job_relatorio(ctx: ContextTypes.DEFAULT_TYPE):
     await pipeline.avisar_dono(ctx.bot, relatorio.relatorio_do_dia(), repetir_apos_h=0)
+    if config.owner_id:
+        await _enviar_relatorio_completo(ctx.bot, config.owner_id, 1)  # os arquivos também ficam em data/relatorios/
 
 
 def _e_dono(update: Update) -> bool:
@@ -242,6 +267,7 @@ def rodar():
     app.add_handler(CommandHandler("status", _cmd_status))
     app.add_handler(CommandHandler("ciclo", _cmd_ciclo))
     app.add_handler(CommandHandler("relatorio", _cmd_relatorio))
+    app.add_handler(CommandHandler("relatoriocompleto", _cmd_relatorio_completo))
     app.add_handler(CallbackQueryHandler(_callback))
     app.add_handler(ChatMemberHandler(_entrou_em_chat, ChatMemberHandler.MY_CHAT_MEMBER))
     app.add_handler(MessageHandler(filters.FORWARDED & filters.ChatType.PRIVATE, _receber_forward))
