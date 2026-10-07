@@ -3,6 +3,7 @@ import logging
 import random
 import re
 import time
+import unicodedata
 from dataclasses import replace
 
 from telegram import Bot
@@ -17,7 +18,7 @@ from .sources import amazon, mercadolivre, mercadolivre_api, shopee
 from .telegram_poster import postar_oferta
 
 log = logging.getLogger("ofertas.pipeline")
-DIAS_SIMILAR = 2  # não repete a mesma "família" de produto no canal por este tempo
+DIAS_SIMILAR = 7  # não repete o mesmo produto (mesmo de outro vendedor, com outro título) no canal por este tempo
 
 
 _estado = {"ml_bloqueado": False}
@@ -82,7 +83,8 @@ def filtrar(ofertas: list[Oferta], canal: Canal | None = None) -> list[Oferta]:
     excluir = canal.excluir if canal else []
     desconto_min = canal.desconto_minimo if canal and canal.desconto_minimo is not None else config.desconto_minimo
     exige_loja = _exige_loja(canal)
-    recentes = {_chave_similar(t) for t in db.titulos_recentes(canal_id, DIAS_SIMILAR)}
+    dias = max(DIAS_SIMILAR, config.nao_repetir_dias)
+    recentes = [_nucleo(t) for t in db.titulos_recentes(canal_id, dias)]
     aprovadas = []
     for o in ofertas:
         if not o.titulo:
@@ -91,8 +93,8 @@ def filtrar(ofertas: list[Oferta], canal: Canal | None = None) -> list[Oferta]:
             continue
         if exige_loja and not _loja_aceita(o):
             continue  # nicho sensível a falsificação: só vendedor verificado
-        if _chave_similar(o.titulo) in recentes:
-            continue  # variação (cor/tamanho) de algo que este canal já postou há pouco
+        if _repetido(_nucleo(o.titulo), recentes):
+            continue  # o mesmo produto (outro vendedor, cor, tamanho) que este canal já postou há pouco
         if db.ja_postada(f"{canal_id}|{o.uid}", config.nao_repetir_dias):
             continue
         if desconto_min and (o.desconto or 0) < desconto_min:
@@ -142,6 +144,48 @@ def _chave_similar(titulo: str) -> str:
     return " ".join(re.findall(r"\w+", titulo.lower())[:5])
 
 
+# palavras que enchem título de marketplace e não dizem qual é o produto
+_RUIDO = set("""
+kit jogo conjunto combo de da do das dos com sem para por em e a o um uma ao na no nas nos ou
+peca unidade unidades original originais profissional completo completa premium novo nova promocao oferta
+frete gratis barato qualidade alta alto resistente multiuso universal importado importada lancamento
+top super reforcado reforcada portatil recarregavel potente forte leve pratico pratica ideal
+masculino masculina feminino feminina unissex adulto cor cores sortido sortida varios varias
+""".split())
+
+
+def _nucleo(titulo: str) -> frozenset[str]:
+    """As palavras que identificam o produto: sem acento, no singular, sem números soltos nem palavras
+    de enfeite. "40 Peças / 46 Peças Jogo De Chave Catraca..." e "Kit Jogo 46 Peças Chaves Soquetes
+    Catraca..." viram quase o mesmo conjunto: é o mesmo kit de outro vendedor."""
+    t = unicodedata.normalize("NFKD", titulo.lower())
+    t = "".join(c for c in t if not unicodedata.combining(c))
+    palavras = set()
+    for p in re.findall(r"[a-z0-9]+", t):
+        if p.isdigit() or len(p) < 3 or re.fullmatch(r"\d+[a-z]{1,3}", p):
+            continue  # quantidades e medidas (46 peças, 1/4, 100ml, 12v) não distinguem o produto
+        if len(p) > 3 and p.endswith("s"):
+            p = p[:-1]
+        if p not in _RUIDO:
+            palavras.add(p)
+    return frozenset(palavras)
+
+
+def _parecidos(a: frozenset[str], b: frozenset[str]) -> bool:
+    """Mesmo produto? Muitas palavras em comum (Jaccard) ou um título quase todo contido no outro."""
+    inter = len(a & b)
+    if not inter:
+        return False
+    if inter / len(a | b) >= 0.5:
+        return True
+    menor = min(len(a), len(b))
+    return menor >= 3 and inter / menor >= 0.65
+
+
+def _repetido(nucleo: frozenset[str], outros) -> bool:
+    return any(_parecidos(nucleo, o) for o in outros)
+
+
 def escolher(ofertas: list[Oferta], n: int) -> list[Oferta]:
     """Top N por desconto, alternando plataformas e pulando variações do mesmo produto."""
     filas: dict[str, list[Oferta]] = {}
@@ -149,14 +193,14 @@ def escolher(ofertas: list[Oferta], n: int) -> list[Oferta]:
         filas.setdefault(o.plataforma, []).append(o)
     ordem = sorted(filas.values(), key=lambda f: f[0].desconto or 0, reverse=True)
     escolhidas: list[Oferta] = []
-    vistas: set[str] = set()
+    vistas: list[frozenset[str]] = []
     while len(escolhidas) < n and any(ordem):
         for fila in ordem:
             while fila:
                 o = fila.pop(0)
-                chave = _chave_similar(o.titulo)
-                if chave not in vistas:
-                    vistas.add(chave)
+                nucleo = _nucleo(o.titulo)
+                if not _repetido(nucleo, vistas):
+                    vistas.append(nucleo)
                     escolhidas.append(o)
                     break
             if len(escolhidas) >= n:
@@ -236,7 +280,7 @@ async def executar_ciclo(bot: Bot) -> int:
 
     limite = {c.id: c.max_posts_por_ciclo or config.max_posts_por_ciclo for c in canais}  # 0 = sem limite
     por_canal = {c.id: 0 for c in canais}
-    chaves_postadas: dict[str, set[str]] = {c.id: set() for c in canais}  # variações já postadas nesta rodada
+    chaves_postadas: dict[str, list[frozenset[str]]] = {c.id: [] for c in canais}  # produtos já postados nesta rodada
     ml_ok = True
     postadas = 0
 
@@ -244,7 +288,7 @@ async def executar_ciclo(bot: Bot) -> int:
         # próximo lote de cada canal (respeitando o teto opcional)
         lote: dict[str, list[Oferta]] = {}
         for c in canais:
-            boas[c.id] = [o for o in boas[c.id] if _chave_similar(o.titulo) not in chaves_postadas[c.id]
+            boas[c.id] = [o for o in boas[c.id] if not _repetido(_nucleo(o.titulo), chaves_postadas[c.id])
                           and (ml_ok or o.plataforma != "mercadolivre")]
             n = LOTE if not limite[c.id] else min(LOTE, limite[c.id] - por_canal[c.id])
             lote[c.id] = escolher(boas[c.id], n) if n > 0 else []
@@ -323,7 +367,7 @@ async def executar_ciclo(bot: Bot) -> int:
                 continue
             postadas += 1
             por_canal[c.id] += 1
-            chaves_postadas[c.id].add(_chave_similar(o.titulo))
+            chaves_postadas[c.id].append(_nucleo(o.titulo))
 
     sobrou = {c.id: len(boas[c.id]) for c in canais}
     db.registrar_ciclo(len(brutas), postadas,

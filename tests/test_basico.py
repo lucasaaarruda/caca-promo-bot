@@ -414,6 +414,12 @@ class AuditoriaCorrecoes(unittest.TestCase):
             self.assertEqual([p for _, p in db.historico_preco(o.uid)], [100.0, 90.0])
 
 
+PRODUTOS_DIFERENTES = ["Furadeira de Impacto Vonder", "Liquidificador Turbo Mondial", "Fone Bluetooth Esportivo JBL",
+                       "Cadeira Gamer Ergonômica", "Mochila Escolar Impermeável", "Relógio Smartwatch Fitness",
+                       "Ventilador de Mesa Silencioso", "Panela de Pressão Elétrica", "Teclado Mecânico Retroiluminado",
+                       "Garrafa Térmica Inox Stanley", "Câmera de Segurança Wifi Intelbras", "Tênis de Corrida Leve Nike"]
+
+
 class PostaEnquantoHouverOferta(unittest.TestCase):
     def _rodar(self, ofertas, limite=0, prazo_estourado=False):
         import asyncio
@@ -426,8 +432,7 @@ class PostaEnquantoHouverOferta(unittest.TestCase):
         return n, bot.enviados
 
     def _ofertas(self, n):
-        nomes = ["Alfa", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf", "Hotel", "India", "Juliet", "Kilo", "Lima"]
-        return [Oferta("amazon", f"id{i}", f"{nomes[i]} produto diferente numero {i} completo", "https://x/" + str(i),
+        return [Oferta("amazon", f"id{i}", PRODUTOS_DIFERENTES[i], "https://x/" + str(i),
                        preco=50, preco_original=100) for i in range(n)]
 
     def test_sem_limite_posta_tudo_que_for_valido(self):
@@ -599,7 +604,7 @@ class RitmoDosPosts(unittest.TestCase):
             esperas.append(t)
 
         canais = [Canal(id="a", nome="A", chat_id="-1"), Canal(id="b", nome="B", chat_id="-2"), Canal(id="c", nome="C", chat_id="-3")]
-        ofs = [Oferta("amazon", f"x{i}", f"Produto numero {i} totalmente diferente {'abcdefgh'[i]}", "https://x/" + str(i), preco=50, preco_original=100) for i in range(6)]
+        ofs = [Oferta("amazon", f"x{i}", PRODUTOS_DIFERENTES[i], "https://x/" + str(i), preco=50, preco_original=100) for i in range(6)]
         bot = FakeBot()
         with mock.patch.object(config, "canais", canais), mock.patch.object(config, "horario_ativo", ""),              mock.patch.object(config, "espacamento_segundos", 300), mock.patch.object(config, "variacao_espacamento", 0),              mock.patch.object(config, "max_posts_por_ciclo", 0), mock.patch.object(config, "desconto_minimo", 25),              mock.patch.object(pipeline.db, "_DB", pathlib.Path(tempfile.mkdtemp()) / "r.db"),              mock.patch.object(pipeline, "coletar", return_value=ofs), mock.patch.object(pipeline.asyncio, "sleep", new=dorme),              mock.patch.object(pipeline, "avisar_dono", new=mock.AsyncMock()):
             n = asyncio.run(pipeline.executar_ciclo(bot))
@@ -1135,6 +1140,45 @@ class AutomotivoSemFerramentasGerais(unittest.TestCase):
             self.assertTrue(R.search(t), t)
         for t in ["Enviado / Vendido WebContinental", "Enviado por Amazon Vendido por LojaX", "Vendido por Amazon Export"]:
             self.assertFalse(R.search(t), t)
+
+
+class NaoRepetirOMesmoProduto(unittest.TestCase):
+    KIT = ["40 Peças / 46 Peças Jogo De Chave Catraca Caixa De Ferramentas Completa Reversível Soquetes Allen Torx",
+           "Kit Jogo 46 Peças Chaves Soquetes Catraca Bits 1/4 Ferramenta Profissional Multiuso Com Maleta",
+           "Kit De Ferramentas 46 Peças Jogo De Soquetes Chave Catraca Reversível Com Maleta Jogo De Chaves",
+           "Kit 46 Peças Chave Catraca Jogo Soquetes Allen Torx Ferramentas Profissional Completo"]
+
+    def test_mesmo_kit_de_vendedores_diferentes_e_repeticao(self):
+        from ofertas.pipeline import _nucleo, _parecidos
+        for a in self.KIT:
+            for b in self.KIT:
+                self.assertTrue(_parecidos(_nucleo(a), _nucleo(b)), (a[:30], b[:30]))
+
+    def test_produtos_diferentes_nao_sao_repeticao(self):
+        from ofertas.pipeline import _nucleo, _parecidos
+        for a, b in [(self.KIT[0], "Alicate Universal 8 Polegadas Isolado"),
+                     ("Jogo de Chaves Allen 9 Peças", "Jogo de Chaves Torx 9 Peças"),
+                     ("Chave Inglesa Ajustável 10 Polegadas", "Chave de Fenda Philips Imantada"),
+                     ("Shampoo Automotivo V-floc Vonixx 1,5L", "Cera Automotiva Vonixx Blend 200g"),
+                     ("Furadeira de Impacto 650W Vonder", "Parafusadeira Furadeira a Bateria 12V")]:
+            self.assertFalse(_parecidos(_nucleo(a), _nucleo(b)), (a, b))
+
+    def test_filtro_barra_o_que_ja_saiu_no_canal_ate_com_outro_titulo(self):
+        from ofertas.canais import Canal
+        canal = Canal(id="f", nome="F", chat_id="-1", nichos=["ferramentas"])
+        novos = [Oferta("shopee", f"n{i}", t, "https://x", preco=20, preco_original=80, loja_confiavel=True)
+                 for i, t in enumerate(self.KIT[1:])]
+        outra = Oferta("shopee", "o", "Alicate Universal 8 Polegadas Isolado Ferramenta", "https://x", preco=20, preco_original=80, loja_confiavel=True)
+        with mock.patch.object(config, "desconto_minimo", 0), mock.patch.object(pipeline.db, "ja_postada", return_value=False),                 mock.patch.object(pipeline.db, "titulos_recentes", return_value=[self.KIT[0]]):
+            self.assertEqual([o.id_produto for o in pipeline.filtrar(novos + [outra], canal)], ["o"])
+
+    def test_escolher_nao_traz_dois_do_mesmo_produto_no_mesmo_lote(self):
+        ofs = [Oferta("shopee", f"k{i}", t, "https://x", preco=20, preco_original=80 + i) for i, t in enumerate(self.KIT)]
+        ofs.append(Oferta("shopee", "alicate", "Alicate Universal 8 Polegadas Isolado Ferramenta", "https://x", preco=20, preco_original=80))
+        escolhidas = pipeline.escolher(ofs, 3)
+        kits = [o for o in escolhidas if o.id_produto.startswith("k")]
+        self.assertEqual(len(kits), 1)
+        self.assertEqual(len(escolhidas), 2)
 
 
 class BloqueioDoML(unittest.TestCase):
