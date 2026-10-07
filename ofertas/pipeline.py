@@ -84,7 +84,7 @@ def filtrar(ofertas: list[Oferta], canal: Canal | None = None) -> list[Oferta]:
     desconto_min = canal.desconto_minimo if canal and canal.desconto_minimo is not None else config.desconto_minimo
     exige_loja = _exige_loja(canal)
     dias = max(DIAS_SIMILAR, config.nao_repetir_dias)
-    recentes = [_nucleo(t) for t in db.titulos_recentes(canal_id, dias)]
+    recentes = [(_nucleo(t), p) for t, p in db.produtos_recentes(canal_id, dias)]
     aprovadas = []
     for o in ofertas:
         if not o.titulo:
@@ -93,7 +93,7 @@ def filtrar(ofertas: list[Oferta], canal: Canal | None = None) -> list[Oferta]:
             continue
         if exige_loja and not _loja_aceita(o):
             continue  # nicho sensível a falsificação: só vendedor verificado
-        if _repetido(_nucleo(o.titulo), recentes):
+        if _repetido(_nucleo(o.titulo), o.preco, recentes):
             continue  # o mesmo produto (outro vendedor, cor, tamanho) que este canal já postou há pouco
         if db.ja_postada(f"{canal_id}|{o.uid}", config.nao_repetir_dias):
             continue
@@ -172,7 +172,7 @@ def _nucleo(titulo: str) -> frozenset[str]:
 
 
 def _parecidos(a: frozenset[str], b: frozenset[str]) -> bool:
-    """Mesmo produto? Muitas palavras em comum (Jaccard) ou um título quase todo contido no outro."""
+    """Títulos com muitas palavras em comum (Jaccard) ou um quase todo contido no outro?"""
     inter = len(a & b)
     if not inter:
         return False
@@ -182,8 +182,23 @@ def _parecidos(a: frozenset[str], b: frozenset[str]) -> bool:
     return menor >= 3 and inter / menor >= 0.65
 
 
-def _repetido(nucleo: frozenset[str], outros) -> bool:
-    return any(_parecidos(nucleo, o) for o in outros)
+def _mesmo_produto(a: frozenset[str], preco_a: float | None, b: frozenset[str], preco_b: float | None) -> bool:
+    """Mesmo produto = título quase igual, ou título parecido E preço parecido. O mesmo kit anunciado por
+    vendedores diferentes tem título diferente mas preço igual; uma marca ou versão diferente (outro
+    perfume da mesma casa, outro auxiliar de partida) custa outra coisa e pode aparecer."""
+    if not _parecidos(a, b):
+        return False
+    inter, uniao = len(a & b), len(a | b)
+    if inter / uniao >= 0.75:
+        return True  # praticamente o mesmo título
+    if preco_a and preco_b:
+        return abs(preco_a - preco_b) / max(preco_a, preco_b) <= 0.20
+    return False
+
+
+def _repetido(nucleo: frozenset[str], preco: float | None, outros) -> bool:
+    """`outros`: lista de (núcleo, preço) do que já saiu."""
+    return any(_mesmo_produto(nucleo, preco, n, p) for n, p in outros)
 
 
 def escolher(ofertas: list[Oferta], n: int) -> list[Oferta]:
@@ -193,14 +208,14 @@ def escolher(ofertas: list[Oferta], n: int) -> list[Oferta]:
         filas.setdefault(o.plataforma, []).append(o)
     ordem = sorted(filas.values(), key=lambda f: f[0].desconto or 0, reverse=True)
     escolhidas: list[Oferta] = []
-    vistas: list[frozenset[str]] = []
+    vistas: list[tuple[frozenset[str], float | None]] = []
     while len(escolhidas) < n and any(ordem):
         for fila in ordem:
             while fila:
                 o = fila.pop(0)
                 nucleo = _nucleo(o.titulo)
-                if not _repetido(nucleo, vistas):
-                    vistas.append(nucleo)
+                if not _repetido(nucleo, o.preco, vistas):
+                    vistas.append((nucleo, o.preco))
                     escolhidas.append(o)
                     break
             if len(escolhidas) >= n:
@@ -280,7 +295,7 @@ async def executar_ciclo(bot: Bot) -> int:
 
     limite = {c.id: c.max_posts_por_ciclo or config.max_posts_por_ciclo for c in canais}  # 0 = sem limite
     por_canal = {c.id: 0 for c in canais}
-    chaves_postadas: dict[str, list[frozenset[str]]] = {c.id: [] for c in canais}  # produtos já postados nesta rodada
+    chaves_postadas: dict[str, list[tuple[frozenset[str], float | None]]] = {c.id: [] for c in canais}  # produtos já postados nesta rodada
     ml_ok = True
     postadas = 0
 
@@ -288,7 +303,7 @@ async def executar_ciclo(bot: Bot) -> int:
         # próximo lote de cada canal (respeitando o teto opcional)
         lote: dict[str, list[Oferta]] = {}
         for c in canais:
-            boas[c.id] = [o for o in boas[c.id] if not _repetido(_nucleo(o.titulo), chaves_postadas[c.id])
+            boas[c.id] = [o for o in boas[c.id] if not _repetido(_nucleo(o.titulo), o.preco, chaves_postadas[c.id])
                           and (ml_ok or o.plataforma != "mercadolivre")]
             n = LOTE if not limite[c.id] else min(LOTE, limite[c.id] - por_canal[c.id])
             lote[c.id] = escolher(boas[c.id], n) if n > 0 else []
@@ -367,7 +382,7 @@ async def executar_ciclo(bot: Bot) -> int:
                 continue
             postadas += 1
             por_canal[c.id] += 1
-            chaves_postadas[c.id].append(_nucleo(o.titulo))
+            chaves_postadas[c.id].append((_nucleo(o.titulo), o.preco))
 
     sobrou = {c.id: len(boas[c.id]) for c in canais}
     db.registrar_ciclo(len(brutas), postadas,

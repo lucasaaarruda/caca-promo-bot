@@ -78,6 +78,14 @@ def total_postadas(canal_id: str | None = None) -> int:
         return c.execute("SELECT COUNT(*) FROM postadas").fetchone()[0]
 
 
+def produtos_recentes(canal_id: str, dias: int) -> list[tuple[str, float | None]]:
+    """(título, preço) do que já saiu no canal nos últimos `dias`: base para não repetir o MESMO produto."""
+    desde = (dt.datetime.now() - dt.timedelta(days=dias)).isoformat(timespec="seconds")
+    with closing(_conn()) as c:
+        return [(r[0], r[1]) for r in c.execute(
+            "SELECT titulo, preco FROM postadas WHERE uid LIKE ? AND postada_em >= ?", (canal_id + "|%", desde))]
+
+
 def titulos_recentes(canal_id: str, dias: int) -> list[str]:
     """Títulos já postados no canal nos últimos `dias` (para não repetir variações do mesmo produto)."""
     desde = (dt.datetime.now() - dt.timedelta(days=dias)).isoformat(timespec="seconds")

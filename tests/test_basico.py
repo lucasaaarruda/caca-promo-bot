@@ -1169,8 +1169,21 @@ class NaoRepetirOMesmoProduto(unittest.TestCase):
         novos = [Oferta("shopee", f"n{i}", t, "https://x", preco=20, preco_original=80, loja_confiavel=True)
                  for i, t in enumerate(self.KIT[1:])]
         outra = Oferta("shopee", "o", "Alicate Universal 8 Polegadas Isolado Ferramenta", "https://x", preco=20, preco_original=80, loja_confiavel=True)
-        with mock.patch.object(config, "desconto_minimo", 0), mock.patch.object(pipeline.db, "ja_postada", return_value=False),                 mock.patch.object(pipeline.db, "titulos_recentes", return_value=[self.KIT[0]]):
+        with mock.patch.object(config, "desconto_minimo", 0), mock.patch.object(pipeline.db, "ja_postada", return_value=False),                 mock.patch.object(pipeline.db, "produtos_recentes", return_value=[(self.KIT[0], 22.0)]):
             self.assertEqual([o.id_produto for o in pipeline.filtrar(novos + [outra], canal)], ["o"])
+
+    def test_produto_diferente_aparece_mesmo_parecido(self):
+        from ofertas.pipeline import _mesmo_produto, _nucleo
+        def igual(a, pa, b, pb):
+            return _mesmo_produto(_nucleo(a), pa, _nucleo(b), pb)
+        # outra versão do mesmo perfume (preço bem diferente): são produtos distintos
+        self.assertFalse(igual("Perfume Lattafa Asad Bourbon EDP 100ml", 93.99, "Perfume Lattafa Asad Elixir EDP 100ml", 129.99))
+        # outra marca do mesmo tipo de produto, bem mais cara/barata
+        self.assertFalse(igual("Auxiliar Partida Bateria Portátil Tivui 1000a Compressor", 99.0, "Vigomot Auxiliar Partida Bateria Portátil Carro Moto", 179.0))
+        # o mesmo kit de outro vendedor, preço praticamente igual: repetição
+        self.assertTrue(igual(self.KIT[0], 29.90, self.KIT[3], 24.89))
+        # título praticamente idêntico: repetição mesmo sem preço
+        self.assertTrue(igual("Kit 46 Peças Chave Catraca Jogo Soquetes Allen", None, "Kit 46 Peças Chave Catraca Jogo Soquetes Allen Torx", None))
 
     def test_escolher_nao_traz_dois_do_mesmo_produto_no_mesmo_lote(self):
         ofs = [Oferta("shopee", f"k{i}", t, "https://x", preco=20, preco_original=80 + i) for i, t in enumerate(self.KIT)]
