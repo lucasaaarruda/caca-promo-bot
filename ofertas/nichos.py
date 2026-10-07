@@ -331,6 +331,7 @@ NICHOS: dict[str, dict] = {
         ],
         # barra o que se parece com ferramenta mas não é (brinquedo, manicure, culinária...)
         "excluir": ["brinquedo", "brinquedos", "infantil", "boneca", "manicure", "pedicure", "cuticula", "esmalte", "cabelo", "barbear",
+                    "unha", "unhas", "cortador de unha", "sobrancelha", "depilador", "pinca", "tesoura de cabelo", "salao",
                     "maquiagem", "livro", "apostila", "curso", "software", "capa de celular", "carro de controle", "pet", "cachorro",
                     "faca de cozinha", "utensilio"],
         "desconto_sugerido": 20,

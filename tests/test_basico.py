@@ -1181,6 +1181,14 @@ class NaoRepetirOMesmoProduto(unittest.TestCase):
         self.assertEqual(len(escolhidas), 2)
 
 
+class FerramentasNaoPegaManicure(unittest.TestCase):
+    def test_alicate_de_unha_nao_e_ferramenta(self):
+        from ofertas.nichos import relevante
+        self.assertFalse(relevante("ANA1108 KIT Grande Alicate cortador de unhas Aço", ["ferramentas"]))
+        self.assertFalse(relevante("Alicate de Cutícula Inox Manicure", ["ferramentas"]))
+        self.assertTrue(relevante("Alicate Universal 8 Polegadas Isolado", ["ferramentas"]))
+
+
 class BloqueioDoML(unittest.TestCase):
     def test_pagina_de_verificacao_para_a_rodada(self):
         from ofertas.sources import mercadolivre
