@@ -62,6 +62,8 @@ class Config:
         self.vendas_minimas: int = int(filtros.get("vendas_minimas", 0))
         # nichos sensíveis a falsificação (perfumes): "oficial" = só loja oficial/vendido pela Amazon;
         # "oficial+lider" = também MercadoLíder Platinum (ML) e loja Indicada bem avaliada (Shopee)
+        # vale para TODOS os canais: só posta oferta de vendedor verificado (loja oficial). false = libera geral
+        self.exigir_loja_oficial: bool = bool(filtros.get("exigir_loja_oficial", True))
         self.lojas_confiaveis: str = str(filtros.get("lojas_confiaveis") or "oficial").strip().lower()
         self.preco_minimo: float = float(filtros.get("preco_minimo", 0))
         self.preco_maximo: float = float(filtros.get("preco_maximo", 0))

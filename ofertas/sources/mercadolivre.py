@@ -211,6 +211,12 @@ def _parse_card(card) -> Oferta | None:
         if m:
             partes.append(f"🎟 Cupom extra: {m.group(1).replace(' ', '')} OFF")
 
+    # vendedor: lojas oficiais trazem o selo (svg aria-label="Loja oficial") ao lado do nome
+    bloco_vendedor = card.select_one(".poly-component__seller")
+    oficial = bool(bloco_vendedor and bloco_vendedor.select_one('[aria-label="Loja oficial"]'))
+    if oficial:
+        partes.append("🏪 Loja oficial")
+
     return Oferta(
         plataforma="mercadolivre",
         id_produto=id_produto,
@@ -224,6 +230,8 @@ def _parse_card(card) -> Oferta | None:
         extra=" · ".join(partes) or None,
         nota=nota,
         vendas=vendas,
+        # sem bloco de vendedor no card = não sabemos (None); com bloco e sem selo = vendedor comum
+        loja_confiavel=True if oficial else (False if bloco_vendedor else None),
     )
 
 

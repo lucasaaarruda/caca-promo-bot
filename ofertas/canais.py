@@ -30,6 +30,7 @@ class Canal:
     ml_etiqueta: str = ""    # etiqueta do Linkbuilder só deste canal (vazio = a do .env): mede o nicho no ML
     cupom: str = ""          # código de cupom fixo deste canal: entra nos posts do ML que não trazem cupom próprio
     amazon_tag: str = ""     # tag de associado só deste canal (vazio = a do .env): mede o nicho na Amazon
+    aceitar_loja_comum: bool = False  # True = este canal aceita vendedor comum (ignora exigir_loja_oficial; perfumes nunca)
 
     @property
     def rotulo(self) -> str:
@@ -65,6 +66,7 @@ def _de_dict(d: dict) -> Canal:
         ml_etiqueta=str(d.get("ml_etiqueta") or "").strip(),
         amazon_tag=str(d.get("amazon_tag") or "").strip(),
         cupom=str(d.get("cupom") or "").strip().upper(),
+        aceitar_loja_comum=bool(d.get("aceitar_loja_comum", False)),
     )
 
 

@@ -81,7 +81,7 @@ def filtrar(ofertas: list[Oferta], canal: Canal | None = None) -> list[Oferta]:
     palavras = canal.palavras if canal else []
     excluir = canal.excluir if canal else []
     desconto_min = canal.desconto_minimo if canal and canal.desconto_minimo is not None else config.desconto_minimo
-    exige_loja = exige_loja_confiavel(nichos)
+    exige_loja = _exige_loja(canal)
     recentes = {_chave_similar(t) for t in db.titulos_recentes(canal_id, DIAS_SIMILAR)}
     aprovadas = []
     for o in ofertas:
@@ -115,6 +115,16 @@ def filtrar(ofertas: list[Oferta], canal: Canal | None = None) -> list[Oferta]:
             continue
         aprovadas.append(o)
     return aprovadas
+
+
+def _exige_loja(canal: Canal | None) -> bool:
+    """Todo canal exige vendedor verificado (config.exigir_loja_oficial), salvo os que optaram por aceitar
+    vendedor comum. Nichos sensíveis a falsificação (perfumes) exigem sempre."""
+    if canal is None:
+        return config.exigir_loja_oficial
+    if exige_loja_confiavel(canal.nichos):
+        return True
+    return config.exigir_loja_oficial and not canal.aceitar_loja_comum
 
 
 def _loja_aceita(o: Oferta) -> bool:
@@ -283,7 +293,7 @@ async def executar_ciclo(bot: Bot) -> int:
             if not link:
                 log.warning("Sem link de afiliado, pulando: %s", o.titulo[:60])
                 continue
-            if exige_loja_confiavel(c.nichos) and o.loja_confiavel is not True:
+            if _exige_loja(c) and o.loja_confiavel is not True:
                 if not await asyncio.to_thread(amazon.vendedor_confiavel, o):
                     log.info("Amazon: vendedor não confirmado como Amazon, pulando (%s): %s", c.nome, o.titulo[:60])
                     continue

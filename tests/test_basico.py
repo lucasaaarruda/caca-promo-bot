@@ -13,6 +13,7 @@ from unittest import mock
 
 from ofertas import pipeline
 from ofertas.config import config, dentro_do_horario
+config.exigir_loja_oficial = False  # os testes de fluxo usam ofertas sem dado de vendedor; os de loja ligam de volta
 from ofertas.models import Oferta
 from ofertas.utils import parse_preco_br
 
@@ -1058,11 +1059,39 @@ class PerfumeSoDeLojaConfiavel(unittest.TestCase):
                Oferta("amazon", "amz", t + " e", "https://x", preco=90, preco_original=200)]
         self.assertEqual(self._filtrar(ofs), ["ok", "ml_ok", "amz"])  # Amazon é confirmada na página, antes de postar
 
-    def test_outros_nichos_nao_exigem(self):
+    def test_todos_os_canais_exigem_quando_ligado(self):
         from ofertas.canais import Canal
-        o = Oferta("shopee", "x", "Bota Country Texana Couro", "https://x", preco=90, preco_original=200, loja_confiavel=False)
+        comum = Oferta("shopee", "x", "Bota Country Texana Couro", "https://x", preco=90, preco_original=200, loja_confiavel=False)
+        oficial = replace(comum, id_produto="y", loja_confiavel=True)
+        country = Canal(id="c", nome="C", chat_id="-2", nichos=["country"])
+        livre = Canal(id="l", nome="L", chat_id="-3", nichos=["country"], aceitar_loja_comum=True)
         with mock.patch.object(config, "desconto_minimo", 0), mock.patch.object(pipeline.db, "ja_postada", return_value=False):
-            self.assertEqual(len(pipeline.filtrar([o], Canal(id="c", nome="C", chat_id="-2", nichos=["country"]))), 1)
+            with mock.patch.object(config, "exigir_loja_oficial", True):
+                self.assertEqual([o.id_produto for o in pipeline.filtrar([comum, oficial], country)], ["y"])
+                self.assertEqual(len(pipeline.filtrar([comum, oficial], livre)), 2)   # canal que optou por aceitar
+            with mock.patch.object(config, "exigir_loja_oficial", False):
+                self.assertEqual(len(pipeline.filtrar([comum, oficial], country)), 2)  # regra global desligada
+
+    def test_perfumes_exige_mesmo_com_regra_global_desligada(self):
+        from ofertas.canais import Canal
+        comum = Oferta("shopee", "x", "Perfume Lattafa Asad Eau de Parfum 100ml", "https://x", preco=90, preco_original=200, loja_confiavel=False)
+        perf = Canal(id="p", nome="P", chat_id="-4", nichos=["perfumes"], aceitar_loja_comum=True)
+        with mock.patch.object(config, "exigir_loja_oficial", False), mock.patch.object(config, "desconto_minimo", 0),                 mock.patch.object(pipeline.db, "ja_postada", return_value=False):
+            self.assertEqual(pipeline.filtrar([comum], perf), [])
+
+    def test_ml_card_com_selo_loja_oficial(self):
+        from bs4 import BeautifulSoup
+        from ofertas.sources import mercadolivre
+        def card(vendedor):
+            return BeautifulSoup(f'''<div class="poly-card"><a class="poly-component__title" href="https://www.mercadolivre.com.br/p/MLB111">Perfume X</a>
+              <div class="poly-price__current"><span class="andes-money-amount__fraction">99</span></div>{vendedor}</div>''', "lxml").select_one("div.poly-card")
+        oficial = mercadolivre._parse_card(card('<span class="poly-component__seller">LATTAFA <svg aria-label="Loja oficial"></svg></span>'))
+        comum = mercadolivre._parse_card(card('<span class="poly-component__seller"><span>AL WATANIAH</span></span>'))
+        sem = mercadolivre._parse_card(card(''))
+        self.assertIs(oficial.loja_confiavel, True)
+        self.assertIn("Loja oficial", oficial.extra)
+        self.assertIs(comum.loja_confiavel, False)
+        self.assertIsNone(sem.loja_confiavel)
 
     def test_shopee_so_loja_oficial_mall(self):
         from ofertas.sources import shopee

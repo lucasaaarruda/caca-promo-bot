@@ -19,6 +19,7 @@ filtros:
   vendas_minimas: 30           # só posta produto com >= N vendas (quando a loja informa); 0 = ignora
   preco_minimo: 0              # 0 = sem limite
   preco_maximo: 0              # 0 = sem limite
+  exigir_loja_oficial: true    # TODOS os canais só postam oferta de vendedor verificado (nota e vendas não detectam falsificação). false = libera
   lojas_confiaveis: oficial    # perfumes (muita falsificação): "oficial" = só loja oficial (Shopee Mall, Loja Oficial do ML, vendido pela Amazon);
                                # "oficial+lider" = também MercadoLíder Platinum (ML) e loja Indicada nota>=4,7 com 100+ vendas (Shopee)
   palavras_bloqueadas: []      # ex.: [capinha, película] — ignora ofertas com essas palavras
