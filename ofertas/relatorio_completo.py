@@ -1,9 +1,9 @@
 """Relatório completo para análise: o que foi postado, por que o resto foi descartado, qualidade das ofertas,
-problemas e observações automáticas. Gera um .md (leitura) e um .csv (todos os posts, para planilha) em
+problemas e observações automáticas. Gera dois PDFs (o relatório e a lista de todos os posts) em
 data/relatorios/."""
-import csv
 import datetime as dt
 import json
+import re
 import statistics
 from collections import Counter, defaultdict
 from contextlib import closing
@@ -27,6 +27,7 @@ _MOTIVOS = {
     "preco_fora_da_faixa": "preço fora da faixa",
     "palavra_bloqueada": "palavra bloqueada",
     "amazon_vendedor_nao_confirmado": "Amazon: não confirmado como vendido pela Amazon",
+    "muito_parecido_em_sequencia": "adiado por variedade (mesmo tipo de produto que acabou de sair)",
 }
 _LOJAS = {"mercadolivre": "Mercado Livre", "shopee": "Shopee", "amazon": "Amazon"}
 
@@ -47,7 +48,10 @@ def _ler(desde: dt.datetime):
 
 
 def _pct(parte: int, total: int) -> str:
-    return f"{100 * parte / total:.0f}%" if total else "-"
+    if not total:
+        return "-"
+    p = 100 * parte / total
+    return f"{p:.1f}%" if 0 < p < 1 else f"{p:.0f}%"
 
 
 def _brl(v) -> str:
@@ -197,11 +201,15 @@ def montar(desde: dt.datetime, ate: dt.datetime) -> tuple[str, list[tuple]]:
                                                    "`lojas_confiaveis: oficial+lider` ou `aceitar_loja_comum` no canal (menos seguro).",
                         "mesmo_produto_ja_postado": "O canal está esgotando o que existe no nicho: amplie buscas/categorias.",
                         "desconto_baixo": "Considere baixar o desconto mínimo deste canal.",
+                        "muito_parecido_em_sequencia": "É a regra de variedade funcionando: essas ofertas esperam a vez para não repetir o tipo de produto em sequência.",
                         }.get(m, "")
                 obs.append(f"**{nomes.get(cid, cid)}**: {_pct(q, relevantes)} dos descartes (fora o nicho) são “{_MOTIVOS.get(m, m)}”. {dica}".strip())
     if so_api:
         obs.append("O Mercado Livre bloqueou a leitura simples de páginas em algumas rodadas; o bot usou o Chrome ou só a API.")
     for plat, v in geral_plataforma.items():
+        if v and not any(p[1] == plat for p in posts):
+            obs.append(f"{_LOJAS.get(plat, plat)} trouxe em média {statistics.mean(v):.0f} ofertas por rodada mas **não postou nada** no período: "
+                       "só passa vendedor verificado (na Shopee, só Shopee Mall) e o que já saiu nos últimos dias fica de fora.")
         if v and sum(1 for x in v if x == 0) / len(v) > 0.3:
             obs.append(f"{_LOJAS.get(plat, plat)} não trouxe nenhuma oferta em {sum(1 for x in v if x == 0)} de {len(v)} rodadas.")
     L += ["## Observações automáticas", ""] + ([f"- {o}" for o in obs] or ["Nada fora do normal."]) + [""]
@@ -211,17 +219,125 @@ def montar(desde: dt.datetime, ate: dt.datetime) -> tuple[str, list[tuple]]:
     return "\n".join(L), linhas_csv
 
 
+def _inline(t: str) -> str:
+    """Markdown inline (negrito, itálico, código) -> marcação do reportlab."""
+    t = t.encode("cp1252", "ignore").decode("cp1252").strip()  # fontes padrão do PDF: sem emojis/símbolos fora do Latin-1
+    t = t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    t = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", t)
+    t = re.sub(r"`(.+?)`", r"<font face='Courier'>\1</font>", t)
+    t = re.sub(r"(?<![\w*])[_*]([^_*]+)[_*](?![\w*])", r"<i>\1</i>", t)
+    return t
+
+
+def _estilos():
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    base = getSampleStyleSheet()["BodyText"]
+    return {
+        "p": ParagraphStyle("p", parent=base, fontSize=9.5, leading=13),
+        "h1": ParagraphStyle("h1", parent=base, fontName="Helvetica-Bold", fontSize=17, leading=21, spaceAfter=8),
+        "h2": ParagraphStyle("h2", parent=base, fontName="Helvetica-Bold", fontSize=13, leading=17, spaceBefore=10, spaceAfter=4),
+        "h3": ParagraphStyle("h3", parent=base, fontName="Helvetica-Bold", fontSize=11, leading=14, spaceBefore=6, spaceAfter=2),
+        "li": ParagraphStyle("li", parent=base, fontSize=9.5, leading=13, leftIndent=14, bulletIndent=4),
+        "li2": ParagraphStyle("li2", parent=base, fontSize=9.5, leading=13, leftIndent=28, bulletIndent=18),
+        "cel": ParagraphStyle("cel", parent=base, fontSize=8, leading=10),
+        "celh": ParagraphStyle("celh", parent=base, fontName="Helvetica-Bold", fontSize=8, leading=10),
+        "code": ParagraphStyle("code", parent=base, fontName="Courier", fontSize=8.5, leading=10.5),
+    }
+
+
+def _tabela_pdf(cabecalho: list[str], linhas: list[list[str]], largura: float, est, pesos: list[float] | None = None):
+    from reportlab.lib import colors
+    from reportlab.platypus import Paragraph, Table, TableStyle
+    dados = [[Paragraph(_inline(str(c)), est["celh"]) for c in cabecalho]]
+    dados += [[Paragraph(_inline(str(c)), est["cel"]) for c in l] for l in linhas]
+    pesos = pesos or [1] * len(cabecalho)
+    t = Table(dados, colWidths=[largura * w / sum(pesos) for w in pesos], repeatRows=1)
+    t.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8eaf0")),
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#b0b4c0")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f6f7fa")]),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3), ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+        ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+    ]))
+    return t
+
+
+def _pdf(arquivo: Path, titulo: str, elementos_fn, paisagem: bool = False) -> None:
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.units import cm
+    from reportlab.platypus import SimpleDocTemplate
+    tam = landscape(A4) if paisagem else A4
+    doc = SimpleDocTemplate(str(arquivo), pagesize=tam, title=titulo, author="Bot de Ofertas",
+                            leftMargin=1.5 * cm, rightMargin=1.5 * cm, topMargin=1.5 * cm, bottomMargin=1.5 * cm)
+    est = _estilos()
+    doc.build(elementos_fn(tam[0] - 3 * cm, est))
+
+
+def _md_para_pdf(texto: str, arquivo: Path) -> None:
+    """Converte o markdown deste relatório (títulos, tabelas, listas, bloco de código) em PDF."""
+    from reportlab.platypus import Paragraph, Preformatted, Spacer
+
+    def elementos(larg, est):
+        out, linhas, i = [], texto.split("\n"), 0
+        while i < len(linhas):
+            ln = linhas[i]
+            if ln.startswith("```"):
+                bloco = []
+                i += 1
+                while i < len(linhas) and not linhas[i].startswith("```"):
+                    bloco.append(linhas[i].replace("█", "#"))
+                    i += 1
+                out.append(Preformatted("\n".join(bloco), est["code"]))
+            elif ln.startswith("|"):
+                tab = []
+                while i < len(linhas) and linhas[i].startswith("|"):
+                    tab.append([c.strip() for c in linhas[i].strip().strip("|").split("|")])
+                    i += 1
+                i -= 1
+                out += [_tabela_pdf(tab[0], tab[2:], larg, est), Spacer(1, 6)]
+            elif ln.startswith("### "):
+                out.append(Paragraph(_inline(ln[4:]), est["h3"]))
+            elif ln.startswith("## "):
+                out.append(Paragraph(_inline(ln[3:]), est["h2"]))
+            elif ln.startswith("# "):
+                out.append(Paragraph(_inline(ln[2:]), est["h1"]))
+            elif ln.lstrip().startswith("- "):
+                fundo = ln.startswith("  ")
+                out.append(Paragraph(_inline(ln.lstrip()[2:]), est["li2" if fundo else "li"], bulletText="•" if not fundo else "–"))
+            elif ln.strip():
+                out.append(Paragraph(_inline(ln), est["p"]))
+            else:
+                out.append(Spacer(1, 4))
+            i += 1
+        return out
+
+    _pdf(arquivo, texto.split("\n", 1)[0].lstrip("# "), elementos)
+
+
+def _posts_para_pdf(linhas: list[tuple], arquivo: Path, titulo: str) -> None:
+    from reportlab.platypus import Paragraph, Spacer
+
+    def elementos(larg, est):
+        out = [Paragraph(_inline(titulo), est["h1"]), Spacer(1, 4)]
+        if not linhas:
+            return out + [Paragraph("Nenhum post no período.", est["p"])]
+        dados = [[str(d)[:16].replace("T", " "), canal, loja, t, _brl(p), _brl(po), f"{d_ or 0}%", of]
+                 for d, canal, loja, t, p, po, d_, of in linhas]
+        return out + [_tabela_pdf(["Data/hora", "Canal", "Loja", "Título", "Preço", "Preço original", "Desc.", "Oficial"],
+                                  dados, larg, est, pesos=[2.2, 2, 1.8, 9, 2, 2.2, 1.1, 1.2])]
+
+    _pdf(arquivo, titulo, elementos, paisagem=True)
+
+
 def gerar(dias: int = 1) -> tuple[Path, Path]:
-    """Gera o relatório dos últimos `dias` (1 = hoje) e devolve (arquivo .md, arquivo .csv)."""
+    """Gera o relatório dos últimos `dias` (1 = hoje) e devolve (PDF do relatório, PDF com todos os posts)."""
     agora = dt.datetime.now()
     desde = (agora - dt.timedelta(days=max(1, dias) - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
     texto, linhas = montar(desde, agora)
     PASTA.mkdir(parents=True, exist_ok=True)
     sufixo = f"{agora:%Y-%m-%d}" if dias <= 1 else f"{agora:%Y-%m-%d}_{dias}dias"
-    md, csv_ = PASTA / f"relatorio-{sufixo}.md", PASTA / f"posts-{sufixo}.csv"
-    md.write_text(texto, encoding="utf-8")
-    with csv_.open("w", encoding="utf-8-sig", newline="") as f:  # utf-8-sig: o Excel abre os acentos certos
-        w = csv.writer(f, delimiter=";")
-        w.writerow(["data_hora", "canal", "loja", "titulo", "preco", "preco_original", "desconto_pct", "loja_oficial"])
-        w.writerows(linhas)
-    return md, csv_
+    rel, posts = PASTA / f"relatorio-{sufixo}.pdf", PASTA / f"posts-{sufixo}.pdf"
+    _md_para_pdf(texto, rel)
+    _posts_para_pdf(linhas, posts, f"Posts — {desde:%d/%m/%Y} a {agora:%d/%m/%Y}")
+    return rel, posts

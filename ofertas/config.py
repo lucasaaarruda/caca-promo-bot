@@ -96,7 +96,8 @@ class Config:
                 self.fonte_ml = {**self.fonte_ml, "categorias": exp["ml"], "grupos": grupos,
                                  "buscas_api": list(dict.fromkeys(exp["ml_buscas"] + palavras))}
                 self.fonte_amazon = {**self.fonte_amazon, "departamentos": exp["amazon_dep"],
-                                     "buscas": list(dict.fromkeys(exp["amazon_buscas"] + palavras))}
+                                     "buscas": list(dict.fromkeys(exp["amazon_buscas"] + palavras)),
+                                     "buscas_fixas": exp["amazon_fixas"]}
                 self.fonte_shopee = {**self.fonte_shopee,
                                      "buscas": list(dict.fromkeys(exp["shopee"] + palavras))}
         except Exception as e:

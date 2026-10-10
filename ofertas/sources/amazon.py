@@ -263,13 +263,15 @@ def _tarefas() -> list[dict]:
 def _tarefas_do_ciclo() -> list[dict]:
     """Rodízio: só algumas páginas por ciclo, para não martelar a Amazon."""
     global _rodizio
-    tarefas = _tarefas()
+    termos_fixos = config.fonte_amazon.get("buscas_fixas") or []
+    fixas = [{"rotulo": f"busca '{t}' (fixa)", "params": {"k": str(t)}} for t in termos_fixos]
+    tarefas = [t for t in _tarefas() if t["params"].get("k") not in termos_fixos]
     por_ciclo = int(config.fonte_amazon.get("requisicoes_por_ciclo", 0)) or len(tarefas)
     if not tarefas or por_ciclo >= len(tarefas):
-        return tarefas
+        return fixas + tarefas
     inicio = _rodizio % len(tarefas)
     _rodizio += por_ciclo
-    return (tarefas + tarefas)[inicio:inicio + por_ciclo]
+    return fixas + (tarefas + tarefas)[inicio:inicio + por_ciclo]
 
 
 def _buscar_por_scraping(tarefas: list[dict]) -> list[Oferta]:
@@ -303,6 +305,33 @@ def _buscar_por_scraping(tarefas: list[dict]) -> list[Oferta]:
 
 
 _api_bloqueada_ate = 0.0
+_titulos_completos: dict[str, tuple[str | None, float | None]] = {}  # ASIN -> (título da página, preço "de")
+
+
+def completar_titulos(ofertas: list[Oferta], limite: int = 12) -> None:
+    """A busca da Amazon às vezes traz só a marca no título ("ARIAT", "Calça jeans Ariat"): sem o resto não dá para
+    saber se é calça masculina ou feminina, nem tamanho, e produtos diferentes parecem repetidos. Lê o título
+    completo na página do produto (no máximo `limite` por rodada; o que já foi lido fica em memória)."""
+    lidos = 0
+    for o in ofertas:
+        if o.plataforma != "amazon" or len(o.titulo.split()) > 3:
+            continue
+        if o.id_produto not in _titulos_completos:
+            if lidos >= limite:
+                continue
+            lidos += 1
+            titulo, _, original, _ = _detalhes(o.url_produto or f"https://www.amazon.com.br/dp/{o.id_produto}")
+            time.sleep(2.5)
+            if not titulo:
+                continue  # página bloqueada: tenta de novo na próxima rodada
+            _titulos_completos[o.id_produto] = (titulo, original)
+        titulo, original = _titulos_completos[o.id_produto]
+        if titulo and len(titulo.split()) > len(o.titulo.split()):
+            o.titulo = titulo
+        if original and o.preco and original > o.preco and not o.preco_original:
+            o.preco_original = original
+    if lidos:
+        log.info("Amazon: título completo lido em %d página(s) de produto", lidos)
 
 
 def buscar_ofertas() -> list[Oferta]:
@@ -375,7 +404,10 @@ def converter(url: str) -> Oferta:
 _RE_VENDIDO_AMAZON = re.compile(r"vendido\s+(?:por\s+|pela\s+)?amazon(?:\.com\.br)?(?!\w)(?!\s+(?:export|global|warehouse|resale))", re.I)
 
 
-def vendedor_confiavel(o: Oferta) -> bool:
+_RE_AMAZON_GLOBAL = re.compile(r'vendido\s+(?:por\s+|pela\s+)?amazon\s+global(?!\w)', re.I)
+
+
+def vendedor_confiavel(o: Oferta, aceitar_global: bool = False) -> bool:
     """A página do produto diz que é vendido (e enviado) pela própria Amazon? Usado em perfumes, onde há
     muita falsificação em vendedores terceiros. Sem conseguir ler a página, a resposta é não."""
     url = o.url_produto or f"https://www.amazon.com.br/dp/{o.id_produto}"
@@ -387,10 +419,24 @@ def vendedor_confiavel(o: Oferta) -> bool:
         blocos = soup.select("#merchant-info, #tabular-buybox, #fulfillerInfoFeature_feature_div, "
                              "#merchantInfoFeature_feature_div, #sellerProfileTriggerId")
         texto = " ".join(b.get_text(" ", strip=True) for b in blocos)
-        return bool(_RE_VENDIDO_AMAZON.search(texto))
+        if _RE_VENDIDO_AMAZON.search(texto):
+            return True
+        return aceitar_global and bool(_RE_AMAZON_GLOBAL.search(texto))
     except Exception as e:
         log.warning("Não consegui verificar o vendedor na Amazon (%s): %s", o.id_produto, e)
         return False
+
+
+def _tamanho_selecionado(soup) -> str | None:
+    """Tamanho escolhido na página da variação (roupa/calçado), sem o rótulo: "Tamanho: 42 BR" -> "42 BR"."""
+    for sel in ("#variation_size_name .selection", "#native_dropdown_selected_size_name",
+                "#inline-twister-expanded-dimension-text-size_name", "#inline-twister-expanded-dimension-text-size"):
+        el = soup.select_one(sel)
+        if el:
+            txt = re.sub(r"^(tamanho|size)\s*:?\s*", "", el.get_text(" ", strip=True), flags=re.I).strip()
+            if txt and len(txt) <= 24 and "selecion" not in txt.lower():
+                return txt
+    return None
 
 
 def _detalhes(url: str):
@@ -413,6 +459,10 @@ def _detalhes(url: str):
 
         el = soup.select_one("#landingImage")
         imagem = (el.get("data-old-hires") or el.get("src")) if el else None
+
+        tam = _tamanho_selecionado(soup)
+        if titulo and tam and "tam" not in titulo.lower():
+            titulo = f"{titulo}, Tamanho {tam}"  # cada tamanho é um anúncio (ASIN) diferente: o título precisa dizer qual
 
         return titulo, preco, preco_original, imagem
     except Exception as e:

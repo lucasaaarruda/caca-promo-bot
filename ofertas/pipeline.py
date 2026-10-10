@@ -1,4 +1,5 @@
 import asyncio
+import datetime as dt
 import logging
 import random
 import re
@@ -12,7 +13,7 @@ from telegram.error import NetworkError, TimedOut
 
 from . import db
 from .canais import Canal
-from .nichos import exige_loja_confiavel, relevante
+from .nichos import aceita_amazon_global, exige_loja_confiavel, parametros_diversidade, prioritaria, relevante, tipo_de
 from .config import config, dentro_do_horario
 from .models import Oferta
 from .sources import amazon, mercadolivre, mercadolivre_api, shopee
@@ -41,7 +42,9 @@ def coletar() -> list[Oferta]:
     if config.fonte_amazon.get("ativa"):
         if config.amazon_tag:
             try:
-                todas += amazon.buscar_ofertas()
+                achadas = amazon.buscar_ofertas()
+                amazon.completar_titulos(achadas)
+                todas += achadas
             except Exception as e:
                 log.error("Amazon: %s", e)
         else:
@@ -153,6 +156,8 @@ def _loja_aceita(o: Oferta) -> bool:
 
 def _muito_vendido(o: Oferta) -> bool:
     """Para canais que aceitam produto sem desconto listado: só os campeões de venda e bem avaliados."""
+    if o.plataforma == "amazon" and o.vendas is None and (o.nota or 0) >= 4.3:
+        return True  # a busca da Amazon não informa vendas: vale a nota
     return o.mais_vendido or ((o.nota is None or o.nota >= 4.5) and (o.vendas or 0) >= 500)
 
 
@@ -171,6 +176,28 @@ masculino masculina feminino feminina unissex adulto cor cores sortido sortida v
 """.split())
 
 
+_RE_TAM = re.compile(r"(?:tamanho|tam)[.:]?\s*(?:no\s+br\s*)?(?P<n>\d{2}|[pgm]{1,2})\b")
+_RE_CINTURA = re.compile(r"\b(?P<w>\d{2})\s*w\b")
+_RE_COMPRIMENTO = re.compile(r"\b\d{2}\s*w\s*[x/]\s*(?P<l>\d{2})l?\b")
+
+
+def _tamanho_calca(t: str) -> str:
+    """Tamanho de calça/jeans no título já normalizado ("Tamanho 42 BR (32W x 36L), barra longa" -> "42|32w|36l|longa").
+    Cada tamanho é um anúncio diferente e vende separado: quem procura o 44 não quer ver o 42."""
+    if not re.search(r"\b(?:calca|jeans)\b", t):
+        return ""
+    partes = []
+    if m := _RE_TAM.search(t):
+        partes.append(m.group("n"))
+    if m := _RE_CINTURA.search(t):
+        partes.append(m.group("w") + "w")
+    if m := _RE_COMPRIMENTO.search(t):
+        partes.append(m.group("l") + "l")
+    if m := re.search(r"barra\s+(regular|longa|curta)", t):
+        partes.append(m.group(1))
+    return "|".join(partes)
+
+
 def _nucleo(titulo: str) -> frozenset[str]:
     """As palavras que identificam o produto: sem acento, no singular, sem números soltos nem palavras
     de enfeite. "40 Peças / 46 Peças Jogo De Chave Catraca..." e "Kit Jogo 46 Peças Chaves Soquetes
@@ -185,6 +212,8 @@ def _nucleo(titulo: str) -> frozenset[str]:
             p = p[:-1]
         if p not in _RUIDO:
             palavras.add(p)
+    if tam := _tamanho_calca(t):
+        palavras.add("@tam:" + tam)  # marcador de tamanho: jeans de tamanhos diferentes não são "o mesmo produto"
     return frozenset(palavras)
 
 
@@ -203,6 +232,10 @@ def _mesmo_produto(a: frozenset[str], preco_a: float | None, b: frozenset[str], 
     """Mesmo produto = título quase igual, ou título parecido E preço parecido. O mesmo kit anunciado por
     vendedores diferentes tem título diferente mas preço igual; uma marca ou versão diferente (outro
     perfume da mesma casa, outro auxiliar de partida) custa outra coisa e pode aparecer."""
+    tam_a = next((p for p in a if p.startswith("@tam:")), None)
+    tam_b = next((p for p in b if p.startswith("@tam:")), None)
+    if tam_a and tam_b and tam_a != tam_b:
+        return False  # mesmo jeans em outro tamanho: anúncio próprio, sai um post por tamanho
     if not _parecidos(a, b):
         return False
     inter, uniao = len(a & b), len(a | b)
@@ -218,12 +251,46 @@ def _repetido(nucleo: frozenset[str], preco: float | None, outros) -> bool:
     return any(_mesmo_produto(nucleo, preco, n, p) for n, p in outros)
 
 
-def escolher(ofertas: list[Oferta], n: int) -> list[Oferta]:
-    """Top N por desconto, alternando plataformas e pulando variações do mesmo produto."""
+# (tipo, família, instante) do que o canal já postou: base da regra de variedade
+Historico = list[tuple[str, str, float]]
+
+
+def carregar_historico(canal: Canal | None) -> Historico:
+    """O que o canal postou nas últimas 24h (do banco), já classificado em tipo e família."""
+    if canal is None or parametros_diversidade(canal.nichos) is None:
+        return []
+    hist: Historico = []
+    for titulo, quando in db.historico_canal(canal.id, 24):
+        tipo, familia = tipo_de(titulo, canal.nichos)
+        hist.append((tipo, familia, dt.datetime.fromisoformat(quando).timestamp()))
+    return hist
+
+
+def _bloqueado_por_variedade(tipo: str, familia: str, hist: Historico, p: dict, agora: float | None = None) -> bool:
+    """Não repete o MESMO TIPO de produto em sequência (6 chaves de impacto seguidas, 3 compressores...).
+    Bloqueia se: o tipo saiu num dos últimos `espaco` posts (dentro de `horas`); o tipo já saiu `max_dia` vezes
+    nas últimas 24h; ou a família (elétricas, árabes...) já ocupa `familia_max` dos últimos `familia_janela` posts."""
+    agora = time.time() if agora is None else agora
+    recentes = [h for h in hist if agora - h[2] <= p["horas"] * 3600]
+    if any(t == tipo for t, _, _ in recentes[-p["espaco"]:]):
+        return True
+    if sum(1 for t, _, _ in hist if t == tipo) >= p["max_dia"]:
+        return True
+    return sum(1 for _, f, _ in recentes[-p["familia_janela"]:] if f == familia) >= p["familia_max"]
+
+
+def escolher(ofertas: list[Oferta], n: int, canal: Canal | None = None, hist: Historico | None = None) -> list[Oferta]:
+    """Top N por desconto, alternando plataformas, pulando variações do mesmo produto e (com `canal`) o mesmo
+    TIPO de produto em sequência: o que sai agora e o que o canal já postou (`hist`) contam juntos."""
+    params = parametros_diversidade(canal.nichos) if canal else None
+    hist = list(hist or [])
+    agora = time.time()
     filas: dict[str, list[Oferta]] = {}
-    for o in sorted(ofertas, key=lambda o: o.desconto or 0, reverse=True):
+    chaves = canal.nichos if canal else []
+    ordem_de = lambda o: (prioritaria(o.titulo, chaves), o.desconto or 0)  # prioritárias (jeans importado) primeiro
+    for o in sorted(ofertas, key=ordem_de, reverse=True):
         filas.setdefault(o.plataforma, []).append(o)
-    ordem = sorted(filas.values(), key=lambda f: f[0].desconto or 0, reverse=True)
+    ordem = sorted(filas.values(), key=lambda f: ordem_de(f[0]), reverse=True)
     escolhidas: list[Oferta] = []
     vistas: list[tuple[frozenset[str], float | None]] = []
     while len(escolhidas) < n and any(ordem):
@@ -231,10 +298,16 @@ def escolher(ofertas: list[Oferta], n: int) -> list[Oferta]:
             while fila:
                 o = fila.pop(0)
                 nucleo = _nucleo(o.titulo)
-                if not _repetido(nucleo, o.preco, vistas):
-                    vistas.append((nucleo, o.preco))
-                    escolhidas.append(o)
-                    break
+                if _repetido(nucleo, o.preco, vistas):
+                    continue
+                if params:
+                    tipo, familia = tipo_de(o.titulo, canal.nichos)
+                    if _bloqueado_por_variedade(tipo, familia, hist, params, agora):
+                        continue
+                    hist.append((tipo, familia, agora))
+                vistas.append((nucleo, o.preco))
+                escolhidas.append(o)
+                break
             if len(escolhidas) >= n:
                 break
     return escolhidas
@@ -314,6 +387,7 @@ async def executar_ciclo(bot: Bot) -> int:
     limite = {c.id: c.max_posts_por_ciclo or config.max_posts_por_ciclo for c in canais}  # 0 = sem limite
     por_canal = {c.id: 0 for c in canais}
     chaves_postadas: dict[str, list[tuple[frozenset[str], float | None]]] = {c.id: [] for c in canais}  # produtos já postados nesta rodada
+    historico = {c.id: await asyncio.to_thread(carregar_historico, c) for c in canais}  # tipos postados nas últimas 24h
     ml_ok = True
     postadas = 0
 
@@ -324,7 +398,7 @@ async def executar_ciclo(bot: Bot) -> int:
             boas[c.id] = [o for o in boas[c.id] if not _repetido(_nucleo(o.titulo), o.preco, chaves_postadas[c.id])
                           and (ml_ok or o.plataforma != "mercadolivre")]
             n = LOTE if not limite[c.id] else min(LOTE, limite[c.id] - por_canal[c.id])
-            lote[c.id] = escolher(boas[c.id], n) if n > 0 else []
+            lote[c.id] = escolher(boas[c.id], n, c, historico[c.id]) if n > 0 else []
         if not any(lote.values()):
             break
 
@@ -371,7 +445,7 @@ async def executar_ciclo(bot: Bot) -> int:
                 log.warning("Sem link de afiliado, pulando: %s", o.titulo[:60])
                 continue
             if _exige_loja(c) and o.loja_confiavel is not True:
-                if not await asyncio.to_thread(amazon.vendedor_confiavel, o):
+                if not await asyncio.to_thread(amazon.vendedor_confiavel, o, aceita_amazon_global(c.nichos)):
                     log.info("Amazon: vendedor não confirmado como Amazon, pulando (%s): %s", c.nome, o.titulo[:60])
                     motivos[c.id]["amazon_vendedor_nao_confirmado"] += 1
                     continue
@@ -387,7 +461,7 @@ async def executar_ciclo(bot: Bot) -> int:
                 # queda de conexão: não é problema do canal. A oferta volta na próxima rodada e o aviso é raro
                 log.error("Falha de rede ao postar '%s' em %s: %s", o.titulo[:60], c.nome, e)
                 db.esquecer(chave)
-                db.registrar_evento("falha_rede", f"{c.id}: {e}")
+                db.registrar_evento("falha_rede", f"{c.id}: {type(e).__name__}: {e or 'sem detalhe'} | {o.titulo[:40]}")
                 await avisar_dono(bot, "⚠️ A conexão com o Telegram caiu e algumas postagens falharam. "
                                        "Elas serão tentadas de novo na próxima rodada. Se isso se repetir muito, "
                                        "verifique a internet, a VPN ou o antivírus do PC.", repetir_apos_h=3)
@@ -402,7 +476,15 @@ async def executar_ciclo(bot: Bot) -> int:
             postadas += 1
             por_canal[c.id] += 1
             chaves_postadas[c.id].append((_nucleo(o.titulo), o.preco))
+            if parametros_diversidade(c.nichos):
+                historico[c.id].append((*tipo_de(o.titulo, c.nichos), time.time()))
 
+    for c in canais:  # o que ficou de fora só por parecer demais com o que acabou de sair
+        p = parametros_diversidade(c.nichos)
+        if p:
+            parecidas = sum(1 for o in boas[c.id] if _bloqueado_por_variedade(*tipo_de(o.titulo, c.nichos), historico[c.id], p))
+            if parecidas:
+                motivos[c.id]["muito_parecido_em_sequencia"] += parecidas
     sobrou = {c.id: len(boas[c.id]) for c in canais}
     detalhe = {c.id: {"boas": total_boas[c.id], "postadas": por_canal[c.id], "descartes": dict(motivos[c.id])}
                for c in canais}

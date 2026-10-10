@@ -529,8 +529,10 @@ class CoberturaEEnvio(unittest.TestCase):
     def test_automotivo_cobre_iluminacao_escapamento_e_detailing(self):
         from ofertas.nichos import categorias_confiaveis
         conf = categorias_confiaveis(["automotivo"])
-        for cid in ("MLB2228", "MLB63532", "MLB433258", "MLB263726", "MLB2227"):  # iluminação, escapamentos, boinas, ceras, ferramentas
+        for cid in ("MLB2228", "MLB63532", "MLB433258", "MLB263726"):  # iluminação, escapamentos, boinas, ceras
             self.assertIn(cid, conf)
+        for cid in ("MLB2227", "MLB455304", "MLB440135"):  # ferramentas/infladores: ferramenta é do canal Ferramentas
+            self.assertNotIn(cid, conf)
 
     def test_parcelas_sem_juros_do_card_do_ml(self):
         from bs4 import BeautifulSoup
@@ -894,7 +896,7 @@ class MotoSaiDoAutomotivo(unittest.TestCase):
     def test_item_para_carro_e_moto_continua_valendo(self):
         from ofertas.nichos import relevante
         self.assertTrue(relevante("Mini Compressor de Ar Digital Portátil para Carro, Moto e Bicicleta", ["automotivo"]))
-        self.assertTrue(relevante("Kit Ferramentas Parafusadeira 20v Carro Moto", ["automotivo"]))
+        self.assertFalse(relevante("Kit Ferramentas Parafusadeira 20v Carro Moto", ["automotivo"]))  # ferramenta é do canal Ferramentas
 
     def test_moto_vira_nicho_proprio_para_quem_quiser_um_canal_de_moto(self):
         from ofertas.nichos import NICHOS, categorias_confiaveis, expandir, relevante
@@ -907,7 +909,7 @@ class MotoSaiDoAutomotivo(unittest.TestCase):
     def test_tweeter_e_busca_da_api_para_o_que_o_grupo_de_referencia_posta(self):
         from ofertas.nichos import expandir
         buscas = expandir(["automotivo"])["ml_buscas"]
-        for termo in ("tweeter jbl selenium", "lavadora alta pressão wap", "adaptador engate rápido karcher", "pneu aro 14"):
+        for termo in ("tweeter jbl selenium", "lavadora alta pressão wap", "pneu aro 14"):
             self.assertIn(termo, buscas)
 
 
@@ -1228,6 +1230,127 @@ class RelatorioCompleto(unittest.TestCase):
         self.assertEqual(linhas[0][-1], "sim")   # post com vendedor verificado
 
 
+class NichoAutomotivo(unittest.TestCase):
+    def test_protetor_solar_facial_nao_e_fluido_de_freio(self):
+        from ofertas import nichos
+        self.assertFalse(nichos.relevante("EUCERIN Protetor Solar Facial Ultra Fluido FPS 60 50ml", ["automotivo"]))
+        self.assertTrue(nichos.relevante("Fluido de Freio DOT 4 500ml", ["automotivo"]))
+
+
+class JeansCountryNaAmazon(unittest.TestCase):
+    def _canal(self):
+        from ofertas.canais import Canal
+        return Canal(id="country", nome="Country", chat_id="-1", nichos=["country"], aceitar_sem_desconto=True)
+
+    def test_jeans_sem_desconto_vendido_pela_amazon_global_passa_no_country(self):
+        titulo = "Ariat Calça jeans feminina R.e.a.l. cintura média Bootcut, Tamanho 40 BR"
+        o = Oferta("amazon", "B0JEANS1", titulo, "x", preco=613.08, nota=4.3)
+        outra = Oferta("amazon", "B0JEANS2", "Ariat Calça jeans masculina M4 Low Rise Boot Cut Tamanho 44 BR",
+                       "x", preco=666.01, nota=4.4)
+        with mock.patch.object(pipeline.db, "_DB", pathlib.Path(tempfile.mkdtemp()) / "j.db"),                 mock.patch.object(config, "desconto_minimo", 25), mock.patch.object(config, "exigir_loja_oficial", True):
+            ids = [x.id_produto for x in pipeline.filtrar([o, outra], self._canal())]
+        self.assertEqual(ids, ["B0JEANS1", "B0JEANS2"])
+
+    def test_amazon_global_so_vale_quando_o_nicho_aceita(self):
+        from ofertas.sources import amazon
+        html = "<div id='merchant-info'>Enviado / Vendido Amazon Global</div>"
+        resp = mock.Mock(status_code=200, text=html)
+        sess = mock.Mock()
+        sess.get.return_value = resp
+        o = Oferta("amazon", "B0X", "Calça jeans Ariat", "x", preco=600)
+        with mock.patch.object(amazon, "_sessao", return_value=sess):
+            self.assertFalse(amazon.vendedor_confiavel(o))
+            self.assertTrue(amazon.vendedor_confiavel(o, aceitar_global=True))
+
+    def test_titulo_curto_da_busca_vira_o_titulo_da_pagina(self):
+        from ofertas.sources import amazon
+        o = Oferta("amazon", "B0CURTO", "ARIAT", "x", preco=600)
+        completo = "Ariat Calça jeans feminina R.e.a.l. cintura média Bootcut"
+        with mock.patch.object(amazon, "_detalhes", return_value=(completo, None, 700.0, None)),                 mock.patch.object(amazon.time, "sleep"):
+            amazon._titulos_completos.pop("B0CURTO", None)
+            amazon.completar_titulos([o])
+        self.assertEqual(o.titulo, completo)
+        self.assertEqual(o.preco_original, 700.0)
+
+
+class JeansUmPostPorTamanho(unittest.TestCase):
+    def test_tamanhos_diferentes_do_mesmo_jeans_sao_posts_diferentes(self):
+        from ofertas.pipeline import _mesmo_produto, _nucleo
+        base = "Cinch Calça Green Label, Medium Stonewash, Tamanho {} BR ({}W x 34L)"
+        n46, n44, n46b = _nucleo(base.format(46, 36)), _nucleo(base.format(44, 34)), _nucleo(base.format(46, 36))
+        self.assertFalse(_mesmo_produto(n46, 347.99, n44, 347.99))
+        self.assertTrue(_mesmo_produto(n46, 347.99, n46b, 347.99))   # mesmo tamanho: continua repetido
+        reg = _nucleo("Ariat Calça jeans R.e.a.l. Bootcut, Tamanho 40 BR, barra regular")
+        longa = _nucleo("Ariat Calça jeans R.e.a.l. Bootcut, Tamanho 40 BR, barra longa")
+        self.assertFalse(_mesmo_produto(reg, 613.08, longa, 613.08))
+
+    def test_so_calca_conta_tamanho(self):
+        from ofertas.pipeline import _mesmo_produto, _nucleo
+        a, b = _nucleo("Camisa Country Xadrez Manga Longa Tamanho 42"), _nucleo("Camisa Country Xadrez Manga Longa Tamanho 44")
+        self.assertTrue(_mesmo_produto(a, 100, b, 100))
+
+    def test_tamanho_da_pagina_entra_no_titulo(self):
+        from bs4 import BeautifulSoup
+        from ofertas.sources import amazon
+        html = ("<span id='productTitle'>Ariat Calça jeans feminina Bootcut</span>"
+                "<div id='variation_size_name'><span class='selection'>Tamanho: 40 BR</span></div>")
+        resp = mock.Mock(status_code=200, text=html)
+        sess = mock.Mock()
+        sess.get.return_value = resp
+        with mock.patch.object(amazon, "_sessao", return_value=sess):
+            titulo, *_ = amazon._detalhes("https://www.amazon.com.br/dp/B0X")
+        self.assertEqual(titulo, "Ariat Calça jeans feminina Bootcut, Tamanho 40 BR")
+
+
+class JeansImportadoTemPrioridade(unittest.TestCase):
+    def test_jeans_das_marcas_de_rodeio_sai_antes_de_oferta_com_mais_desconto(self):
+        from ofertas.canais import Canal
+        canal = Canal(id="country", nome="Country", chat_id="-1", nichos=["country"])
+        boné = oferta("mercadolivre", "b", "Boné Country Aba Curva", preco=49, original=100)
+        jeans = oferta("amazon", "j", "Ariat Calça jeans feminina Bootcut Tamanho 40 BR", preco=613, original=None)
+        escolhidas = pipeline.escolher([boné, jeans], 2, canal)
+        self.assertEqual([o.id_produto for o in escolhidas][0], "j")
+
+    def test_buscas_fixas_rodam_toda_rodada(self):
+        from ofertas.sources import amazon
+        fonte = {"buscas": ["a", "b", "c", "calça jeans ariat"], "buscas_fixas": ["calça jeans ariat"], "requisicoes_por_ciclo": 1}
+        with mock.patch.object(config, "fonte_amazon", fonte), mock.patch.object(amazon, "_rodizio", 0):
+            r1 = [t["params"]["k"] for t in amazon._tarefas_do_ciclo()]
+            r2 = [t["params"]["k"] for t in amazon._tarefas_do_ciclo()]
+        self.assertEqual(r1[0], "calça jeans ariat")
+        self.assertEqual(r2[0], "calça jeans ariat")
+        self.assertEqual(len(r1), 2)
+        self.assertNotEqual(r1[1], r2[1])
+
+
+class ForaDoNichoNoCarro(unittest.TestCase):
+    def test_itens_que_vazaram_para_o_canal_de_carro(self):
+        from ofertas import nichos
+        fora = ["Boina Clássica Italiana Preta Ajustável Primavera Verão 100% Algodão",
+                "Chapéu Boina Europeia Retrô Masculino Feminino Cap Poliéster Cinza Un Lisa",
+                "Detergente para Lava Louça Jimo Pastilhas Multicamadas com 25 Unidades",
+                "EUCERIN Protetor Solar Facial Ultra Fluido FPS 60 50ml",
+                "Compressor De Ar Direto Tufão 370w Bivolt + Pistola E Mangueira Erb Maquinas",
+                "Kit 2 Adaptador Conector M22 14mm Rosca X Engate Rápido 1/4",
+                "Poste De Ferro Barra Limitador Vaga Garagem Segurança Amarelo",
+                "Redutor De Engrenagem Corrox Fresa Química Kit 2x1l"]
+        for t in fora:
+            self.assertFalse(nichos.relevante(t, ["automotivo"]), t)
+        dentro = ["Kit 3 Boinas Espuma 150mm Polimento Automotivo", "Pastilha de Freio Dianteira Gol G5 Fras-le",
+                  "WD-40 Limpador Multiuso Desencravante Automotivo 300 Ml"]
+        for t in dentro:
+            self.assertTrue(nichos.relevante(t, ["automotivo"]), t)
+
+
+class MarcasDeFerramentas(unittest.TestCase):
+    def test_chiaperini_e_tafort_entram_no_canal_de_ferramentas(self):
+        from ofertas import nichos
+        for t in ["Tafort Jogo de Chaves Combinadas 12 Peças", "Chiaperini Marreta Cabo de Madeira 1kg", "Tafort Lanterna LED"]:
+            self.assertTrue(nichos.relevante(t, ["ferramentas"]), t)
+        self.assertIn("chiaperini", nichos.expandir(["ferramentas"])["amazon_buscas"])
+        self.assertIn("tafort", nichos.expandir(["ferramentas"])["ml_buscas"])
+
+
 class BloqueioDoML(unittest.TestCase):
     def test_pagina_de_verificacao_para_a_rodada(self):
         from ofertas.sources import mercadolivre
@@ -1250,6 +1373,170 @@ class BloqueioDoML(unittest.TestCase):
             self.assertEqual(mercadolivre.buscar_ofertas(), [achada])   # 2ª: vai direto ao navegador
         self.assertEqual(sess.get.call_count, 1)
         self.assertEqual(nav.call_count, 2)
+
+
+class NichoCadaUmNoSeuCanal(unittest.TestCase):
+    """Erros reais de 07/10/2026: ferramenta e EPI no Automotivo, lampião/encadernadora no Country, detergente em Perfumes."""
+
+    def test_automotivo_nao_aceita_ferramenta_nem_epi_nem_pela_categoria_do_ml(self):
+        from ofertas.nichos import relevante
+        fora = ["Chave De Impacto 4.0ah Parafusadera Dobevi Cor Azul 850n.m", "Parafusadeira e Chave De Impacto 1/2'' Gdx 18v-285 Bosch",
+                "Esmerilhadeira Angular Profissional 780w 115mm Com Politriz E Lixadeira", "Moto Esmeril 6 Pol 350w 9727 Bremen",
+                "Kit Mascara Respirador 6200 Premium + 4 Filtros 2091 Uso Em Pintura Automotiva", "Abafador Eletrônico Earmor M30 Tiro Esportivo Proteção Auditiva",
+                "Colete Refletivo Segurança Faixa Sinalizador Tipo Blusao Epi", "Vonder, Jogo De Soquetes E Ponteiras Com Encaixe De 1/4",
+                "Máquina De Solda Inversora 200a Tig Mma", "Serra Circular Elétrica 185mm"]
+        for t in fora:
+            self.assertFalse(relevante(t, ["automotivo"]), t)
+            for cat in ("MLB2239", "MLB2238", "MLB1747", "MLB3381"):  # categorias confiáveis do automotivo
+                self.assertFalse(relevante(t, ["automotivo"], categoria=cat), (t, cat))
+        for t in ["Compressor De Ar 7,3 Pés 50 Litros 2 Hp Mcv50 - Vonder", "Compressor De Ar Elétrico Portátil 220v 550w - Pró Euro",
+                  "BLACK+DECKER Aspirador de Pó Portátil à Bateria 12V APB12000"]:
+            self.assertFalse(relevante(t, ["automotivo"]), t)   # compressor de oficina é ferramenta; o de pneu (carro) continua
+        for t in ["Lavadora de Alta Pressão Karcher 1800 PSI", "Mini Compressor de Ar Digital Portátil para Carro, Moto e Bicicleta",
+                  "Macaco Hidraulico Jacare 2 Toneladas", "Cadeira para Auto 0 a 36kg 4 Road Burigotto", "Kit Ferramentas Automotivas Reparo",
+                  "Alto Falante Triaxial Jbl 6 Polegadas", "Pneu Aro 18 Bridgestone 235/55r18"]:
+            self.assertTrue(relevante(t, ["automotivo"]), t)
+
+    def test_ferramentas_fica_com_ferramenta_e_epi_e_deixa_carro_e_lavadora(self):
+        from ofertas.nichos import relevante
+        for t in ["Kit Mascara Respirador 6200 Premium + 4 Filtros 2091 Uso Em Pintura Automotiva Obras", "Chave De Impacto Dobevi Sem Fio 2300 Nm",
+                  "Furadeira Parafusadeira C/ 2 Baterias Kit Completo Eixo Flexível", "Moto Esmeril 6 Pol 350w 9727 Bremen",
+                  "Colete Refletivo Segurança Faixa Sinalizador Tipo Blusao Epi"]:
+            self.assertTrue(relevante(t, ["ferramentas"]), t)
+        self.assertTrue(relevante("Abafador Eletrônico Earmor M30 Tiro Esportivo Proteção Auditiva", ["ferramentas"], categoria="MLB454904"))
+        for t in ["Lavadora de Alta Pressão Kärcher K5 2100 PSI", "Lava Jato Portátil Lavadora 2 Baterias Lavar Carro",
+                  "Compressor De Ar Digital Calibrador De Pneu Para Moto E Carro", "Par De Bucha Aço Do Eixo Traseiro Peugeot 206",
+                  "Termômetro Infravermelho Digital Para Culinária E Industrial", "Bota Galocha Pvc Limpeza Faxina"]:
+            self.assertFalse(relevante(t, ["ferramentas"]), t)
+            self.assertFalse(relevante(t, ["ferramentas"], categoria="MLB454904"), t)
+            self.assertFalse(relevante(t, ["ferramentas"], categoria="MLB269518"), t)
+
+    def test_country_exige_estilo_e_produto_de_moda(self):
+        from ofertas.nichos import relevante
+        for t in ["Botina Masculina Chelsea Elegante Couro Legitimo Bico Fino", "Camisa Lampião Western Amarra 500/600 Velas Kit 12pçs",
+                  "Berloque Chapéu Cowboy Banhado A Prata 925 Premium", "Encadernadora The Cinch We R - Furo Quadrado American Craft",
+                  "Bota Botina Masculina Couro Trabalho Segurança Epi Bico Pvc", "Sapato Social Masculino Bico Fino Couro",
+                  "Quadro Decorativo Country Fazenda", "Caneca Country Rodeio Porcelana"]:
+            self.assertFalse(relevante(t, ["country"]), t)
+        for t in ["Botas Femininas Texana Rodeio Country Cano Alto Bico Fino", "Boné Aba Curva Simprão Farm Preto Country",
+                  "Camisa Western Masculina Xadrez Manga Longa", "Calça Jeans Wrangler Masculina Country", "Cinto Country Couro Fivela Rodeio",
+                  "Chapéu Cowboy Aba Larga Masculino Palha"]:
+            self.assertTrue(relevante(t, ["country"]), t)
+
+    def test_perfumes_nao_aceita_produto_de_limpeza_com_fragrancia(self):
+        from ofertas.nichos import relevante
+        for t in ["Detergente Limpador para Extratoras Concentrado WAP Limpa e Extrai, com Fragrância e sem Espuma, 1 Litro",
+                  "Amaciante Concentrado Com Fragrância Floral 2L", "Desinfetante Perfumado Lavanda 2L",
+                  "Aromatizante de Ambiente Spray Fragrância Baunilha", "Desodorante Colônia Cebolinha Turma da Mônica Jequiti 25ml"]:
+            self.assertFalse(relevante(t, ["perfumes"]), t)
+            self.assertFalse(relevante(t, ["perfumes"], categoria="MLB6284"), t)
+        for t in ["Perfume Árabe Qaed Al Fursan Lattafa Edp 90 Ml", "Natura Essencial Elixir Deo Parfum 100ml", "Granado Colônia Terrapeutics 230ml",
+                  "Armani Beauty, Acqua di Giò Eau de Toilette, Perfume Masculino", "Body Splash Arabe C/4un 200ml Perfume Feminino"]:
+            self.assertTrue(relevante(t, ["perfumes"]), t)
+
+    def test_canal_com_dois_nichos_avalia_cada_nicho_por_si(self):
+        from ofertas.nichos import relevante
+        self.assertTrue(relevante("Perfume Árabe Lattafa 100ml", ["country", "perfumes"]))      # não precisa de "produto de moda"
+        self.assertTrue(relevante("Camisa Country Masculina", ["country", "perfumes"]))
+        self.assertFalse(relevante("Camisa Lampião Western Kit 12pçs", ["country", "perfumes"]))
+
+
+class VariedadeEmSequencia(unittest.TestCase):
+    CHAVES = ["Chave De Impacto 4.0ah Parafusadera Dobevi Cor Azul 850n.m", "Chave de Impacto Dobevi Sem Fio 2300 Nm, com 2 Baterias",
+              "Parafusadeira Chave De Impacto A Bateria Lítio 21v Motor Brushless The Black Tools",
+              "Chave De Impacto Parafusadeira Furadeira Bateria Recarregável Azul 2000mah", "Chave De Impacto 1/2 Pol Makita Dtw300z",
+              "Parafusadeira e Chave De Impacto 1/2'' Gdx 18v-285 + 2 Baterias GBA 2ah Bosch"]
+
+    def test_tipo_agrupa_variantes_e_separa_o_que_e_diferente(self):
+        from ofertas.nichos import tipo_de
+        tipos = {tipo_de(t, ["ferramentas"])[0] for t in self.CHAVES}
+        self.assertEqual(tipos, {"furadeira"})                      # chave de impacto e parafusadeira são a mesma família de produto
+        self.assertNotEqual(tipo_de("Alicate Universal 8 Polegadas", ["ferramentas"])[0], "furadeira")
+        self.assertEqual(tipo_de("Kit Mascara Respirador 6200 Premium Filtros", ["ferramentas"])[0], "respirador")
+        self.assertEqual(tipo_de("Nível Laser Verde 16 Linhas 2 Baterias Recarregável", ["ferramentas"])[0], "nivel")
+        self.assertEqual(tipo_de("Perfume Árabe Lattafa Fakhar Platin 100ml", ["perfumes"]), ("lattafa", "arabe"))
+        self.assertEqual(tipo_de("Perfume Qualquer Marca Nova Eau de Parfum 100ml", ["perfumes"])[1], "grife")   # família padrão
+
+    def test_seis_chaves_de_impacto_nao_saem_em_sequencia(self):
+        from ofertas.canais import Canal
+        canal = Canal(id="f", nome="F", chat_id="-1", nichos=["ferramentas"])
+        ofs = [oferta("mercadolivre", f"c{i}", t, 100 + i * 10, 400 + i * 10) for i, t in enumerate(self.CHAVES)]
+        outros = [oferta("mercadolivre", "a", "Alicate Universal 8 Polegadas Isolado 1000v", 40, 90),
+                  oferta("mercadolivre", "b", "Trena Laser Digital 40m Medidor de Distância", 90, 200),
+                  oferta("mercadolivre", "c", "Maleta de Ferramentas Reforçada 16 Bolsos", 60, 130)]
+        lote = pipeline.escolher(ofs + outros, 3, canal, [])
+        titulos = [o.titulo for o in lote]
+        self.assertEqual(sum(t in self.CHAVES for t in titulos), 1)   # no máximo UMA chave de impacto no lote
+        self.assertEqual(len(lote), 3)
+
+    def test_historico_do_canal_tambem_bloqueia(self):
+        import time
+        from ofertas.canais import Canal
+        canal = Canal(id="f", nome="F", chat_id="-1", nichos=["ferramentas"])
+        agora = time.time()
+        hist = [("furadeira", "eletricas", agora - 600)]        # acabou de sair uma chave de impacto
+        ofs = [oferta("mercadolivre", "c0", self.CHAVES[0], 100, 400), oferta("mercadolivre", "a", "Alicate Universal 8 Polegadas", 40, 90)]
+        self.assertEqual([o.titulo for o in pipeline.escolher(ofs, 2, canal, hist)], ["Alicate Universal 8 Polegadas"])
+        antigo = [("furadeira", "eletricas", agora - 5 * 3600)]  # saiu há 5h (> janela de 3h) e não bate o limite do dia: pode de novo
+        self.assertEqual(len(pipeline.escolher(ofs, 2, canal, antigo)), 2)
+
+    def test_limite_por_tipo_no_dia_e_familia(self):
+        import time
+        from ofertas.canais import Canal
+        canal = Canal(id="f", nome="F", chat_id="-1", nichos=["ferramentas"])
+        agora = time.time()
+        quatro_hoje = [("furadeira", "eletricas", agora - 20 * 3600 + i) for i in range(4)]
+        self.assertEqual(pipeline.escolher([oferta("mercadolivre", "c0", self.CHAVES[0], 100, 400)], 1, canal, quatro_hoje), [])  # 4 no dia
+        duas_eletricas = [("serra", "eletricas", agora - 900), ("solda", "eletricas", agora - 600)]
+        esmeril = oferta("mercadolivre", "e", "Esmerilhadeira Angular 115mm 850w Makita", 200, 400)
+        manual = oferta("mercadolivre", "m", "Jogo de Chaves Allen Torx 9 Peças Aço", 20, 50)
+        self.assertEqual([o.id_produto for o in pipeline.escolher([esmeril, manual], 2, canal, duas_eletricas)], ["m"])  # 3ª elétrica seguida espera
+
+    def test_ar_condicionado_nao_trava_por_variedade(self):
+        import time
+        from ofertas.canais import Canal
+        from ofertas.nichos import parametros_diversidade
+        self.assertIsNone(parametros_diversidade(["arcondicionado"]))
+        canal = Canal(id="ar", nome="Ar", chat_id="-1", nichos=["arcondicionado"])
+        ofs = [oferta("mercadolivre", "ar0", "Ar Condicionado Split Inverter 9000 Btus Gree Eco Garden", 1500, 2500),
+               oferta("mercadolivre", "ar1", "Ar Condicionado Portátil 12000 Btus Springer Midea Quente Frio", 2900, 4200),
+               oferta("mercadolivre", "ar2", "Ar Condicionado Janela Mecânico 7500 Btus Consul", 4400, 6000)]
+        self.assertEqual(len(pipeline.escolher(ofs, 3, canal, [("ar condicionado", "x", time.time())] * 6)), 3)
+
+    def test_ciclo_completo_intercala_os_tipos_e_guarda_o_resto(self):
+        import asyncio
+        import json
+        import sqlite3
+        canal = Canal_ = None
+        from ofertas.canais import Canal
+        canal = Canal(id="ferr", nome="Ferr", chat_id="-1", nichos=["ferramentas"])
+        outros = ["Alicate Universal 8 Polegadas Isolado 1000v", "Trena Laser Digital 40m Medidor de Distância", "Maleta de Ferramentas Reforçada 16 Bolsos",
+                  "Jogo de Chaves Allen Torx 9 Peças Aço", "Nível de Bolha Alumínio 40cm Profissional"]
+        brutas = [Oferta("mercadolivre", f"c{i}", t, "", url_produto="https://ml/x", preco=100 + i * 10, preco_original=400 + i * 10, loja_confiavel=True)
+                  for i, t in enumerate(self.CHAVES)]
+        brutas += [Oferta("mercadolivre", f"o{i}", t, "", url_produto="https://ml/y", preco=30 + i * 7, preco_original=70 + i * 15, loja_confiavel=True)
+                   for i, t in enumerate(outros)]
+
+        def gerar(grupos):
+            for etiqueta, ofs in grupos.items():
+                for o in ofs:
+                    o.url_afiliado = f"https://meli.la/{o.id_produto}"
+
+        bot = FakeBot()
+        banco = pathlib.Path(tempfile.mkdtemp()) / "v.db"
+        with mock.patch.object(config, "canais", [canal]), mock.patch.object(config, "ml_etiqueta", "padrao"), \
+             mock.patch.object(pipeline.db, "_DB", banco), mock.patch.object(config, "horario_ativo", ""), \
+             mock.patch.object(config, "desconto_minimo", 25), mock.patch.object(config, "max_posts_por_ciclo", 0), \
+             mock.patch.object(config, "espacamento_segundos", 0), mock.patch.object(pipeline, "coletar", return_value=brutas), \
+             mock.patch.object(pipeline.mercadolivre, "gerar_links_por_etiqueta", side_effect=gerar), \
+             mock.patch.object(pipeline.asyncio, "sleep", new=mock.AsyncMock()), mock.patch.object(pipeline, "avisar_dono", new=mock.AsyncMock()):
+            n = asyncio.run(pipeline.executar_ciclo(bot))
+        textos = " ".join(txt for _, txt in bot.enviados)
+        self.assertEqual(n, len(bot.enviados))
+        self.assertEqual(sum(1 for t in self.CHAVES if t[:30] in textos), 1)     # das 6 chaves de impacto, só 1 saiu agora
+        self.assertEqual(sum(1 for t in outros if t[:30] in textos), 5)           # os 5 outros tipos saíram todos
+        detalhe = json.loads(sqlite3.connect(banco).execute("select detalhe from ciclos").fetchone()[0])
+        self.assertEqual(detalhe["ferr"]["descartes"].get("muito_parecido_em_sequencia"), 5)   # as outras 5 esperam a vez
 
 
 if __name__ == "__main__":

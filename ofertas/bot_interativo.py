@@ -72,10 +72,10 @@ async def _cmd_relatorio(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def _enviar_relatorio_completo(bot, chat_id, dias: int = 1) -> None:
-    """Gera o relatório completo (.md + .csv) e manda os dois arquivos no privado do dono."""
+    """Gera o relatório completo (2 PDFs) e manda os dois arquivos no privado do dono."""
     try:
-        md, csv_ = await asyncio.to_thread(relatorio_completo.gerar, dias)
-        for arq in (md, csv_):
+        arquivos = await asyncio.to_thread(relatorio_completo.gerar, dias)
+        for arq in arquivos:
             with open(arq, "rb") as f:
                 await bot.send_document(chat_id, f, filename=arq.name)
     except Exception as e:

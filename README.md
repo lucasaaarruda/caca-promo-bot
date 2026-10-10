@@ -9,6 +9,7 @@ Bot que roda **no seu PC** (Windows), garimpa promoções em **Mercado Livre, Sh
 Dois modos, no mesmo programa:
 
 1. **Automático** — de tempos em tempos busca ofertas, filtra por desconto mínimo, evita repetir produto e posta as melhores no canal, já com o seu link de afiliado.
+   Cada canal só recebe produto do seu nicho (ferramenta e EPI não entram no Automotivo, por exemplo) e **não repete o mesmo tipo de produto em sequência**: por canal, o mesmo tipo (ex.: chave de impacto/parafusadeira) só volta depois de 6 posts, no máximo 4 por dia, e uma família (ex.: ferramentas elétricas) ocupa no máximo 2 dos últimos 4 posts. Os tipos e os limites ficam em `nichos.py` (`tipos` e `diversidade` de cada nicho); o relatório mostra quantas ofertas esperaram a vez (“adiado por variedade”).
 2. **Conversor** — você cola qualquer link de produto no privado do bot; ele monta a prévia do post com o seu link e você decide **✅ Postar** ou **🗑 Descartar**.
 
 | Plataforma | De onde vêm as ofertas | Link de afiliado |

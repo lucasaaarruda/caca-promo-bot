@@ -11,6 +11,7 @@ marcado = todas as categorias (comportamento padrão).
 import json
 import re
 import unicodedata
+from functools import lru_cache
 
 from .caminhos import DATA_DIR
 
@@ -89,9 +90,9 @@ NICHOS: dict[str, dict] = {
         "emoji": "🚗", "nome": "Automotivo",
         "ml_buscas": ["boina de polimento", "lâmpada led h4", "lâmpada led h7", "bateria automotiva",
                       "bicos lavadora alta pressão", "protetor solar para-brisa",
-                      "selante de pneu", "cera automotiva", "aditivo diesel", "abafador esportivo", "kit detalhamento automotivo",
+                      "selante de pneu", "cera automotiva", "aditivo diesel", "kit detalhamento automotivo",
                       "espuma ativa lava jato", "aromatizante automotivo", "capa de volante", "carregador veicular",
-                      "tweeter jbl selenium", "lavadora alta pressão wap", "adaptador engate rápido karcher", "shampoo automotivo",
+                      "tweeter jbl selenium", "lavadora alta pressão wap", "shampoo automotivo",
                       "pneu aro 13", "pneu aro 14", "pneu aro 15", "fita led interior carro", "escova detalhamento automotivo",
                       "amortecedor porta-malas", "palheta limpador para-brisa", "pastilha de freio",
                       "espuma mágica proauto", "kit limpeza interna vonixx", "restaurax vonixx", "v-floc vonixx",
@@ -102,14 +103,14 @@ NICHOS: dict[str, dict] = {
                       "aspirador automotivo portátil", "luz led interior carro", "cheirinho para carro",
                       "kit lavagem caraíva", "cera alien", "selante de pneus gloss", "limpa alumínio vintex alumax"],
         # subcategorias do ML (árvore pública): cada uma tem a sua página de ofertas
-        "ml": {"MLB188063": "Limpeza Automotiva", "MLB3381": "Som Automotivo", "MLB2227": "Ferramentas para Veículos",
+        "ml": {"MLB188063": "Limpeza Automotiva", "MLB3381": "Som Automotivo",
                "MLB22693": "Peças de Carros", "MLB1747": "Acessórios de Carros",
                "MLB456111": "Lubrificantes e Fluidos", "MLB2239": "Segurança Veicular",
                "MLB2238": "Pneus e Acessórios",
                # subcategorias: cada uma tem a sua própria página de ofertas (a da categoria-mãe mostra só ~48)
                "MLB2228": "Iluminação", "MLB63532": "Escapamentos", "MLB191834": "Filtros", "MLB6789": "Freios",
-               "MLB22648": "Suspensão e Direção", "MLB2220": "Baterias", "MLB440135": "Infladores",
-               "MLB455304": "Ferramentas para Baterias", "MLB271120": "Guinchos", "MLB60657": "Chaves",
+               "MLB22648": "Suspensão e Direção", "MLB2220": "Baterias",
+               "MLB271120": "Guinchos", "MLB60657": "Chaves",
                "MLB114675": "Acessórios Exteriores", "MLB114676": "Acessórios Interiores",
                "MLB433258": "Boinas", "MLB263726": "Ceras", "MLB263728": "Polidor", "MLB263727": "Panos",
                "MLB431864": "Shampoo para Carros", "MLB363814": "Tratamentos", "MLB392348": "Seladores",
@@ -125,15 +126,15 @@ NICHOS: dict[str, dict] = {
         # relevância (Amazon/Shopee): o título precisa conter um destes termos (palavra inteira, sem acento)...
         "termos": ["carro", "carros", "automotivo", "automotiva", "automotivos", "veicular", "veiculo", "veiculos",
                    "moto", "motos", "motocicleta", "capacete", "pneu", "pneus", "calibrador",
-                   "compressor de ar", "auxiliar de partida", "carregador de bateria", "bateria automotiva",
+                   "calibrador de pneu", "mini compressor", "inflador de pneu", "auxiliar de partida", "carregador de bateria", "bateria automotiva",
                    "rastreador", "reboque", "guincho", "carplay", "android auto", "multimidia",
                    "central multimidia", "som automotivo", "volante", "tapete automotivo", "farol",
                    "limpador de para-brisa", "para-brisa", "parabrisa", "retrovisor", "oleo de motor",
                    "lubrificante", "aditivo", "wd-40", "graxa", "cera automotiva", "cera liquida", "carnauba",
                    "polidor", "polimento", "vitrificador", "cristalizador", "detailing", "snow foam",
                    "shampoo automotivo", "lavagem", "lavadora de alta pressao", "lava jato", "alta pressao",
-                   "pano de microfibra", "aspirador automotivo", "aspirador de po portatil", "vonixx",
-                   "cadeira para auto", "macaco hidraulico", "chave de roda", "chave de impacto",
+                   "pano de microfibra", "aspirador automotivo", "vonixx",
+                   "cadeira para auto", "macaco hidraulico", "chave de roda",
                    "estepe", "triangulo", "extintor", "palheta", "sensor de re",
                    "camera de re", "dashcam", "camera veicular", "suporte celular carro", "suporte veicular",
                    "motoqueiro", "motoboy", "motociclista", "bebe conforto", "cadeirinha", "escapamento",
@@ -142,10 +143,10 @@ NICHOS: dict[str, dict] = {
                    "lanterna traseira", "lampada led", "kit xenon", "insulfilm", "alarme automotivo",
                    "alarme de carro", "trava eletrica", "sensor de estacionamento", "cabo de bateria",
                    "bomba de ar", "aro de roda", "calota", "fluido", "radiador",
-                   "boina", "boinas", "politriz", "lampada h4", "lampada h7", "led h4", "led h7", "farol de milha",
+                   "boina de polimento", "boina de espuma", "boina de la", "boina de carneiro", "politriz", "lampada h4", "lampada h7", "led h4", "led h7", "farol de milha",
                    "capa de volante", "capa de banco", "quebra-sol", "protetor solar para-brisa", "bicos para lavadora",
-                   "engate rapido", "selante", "desengraxante", "aromatizante", "abafador", "ponteira", "catalisador",
-                   "pastilha", "lavadora de pressao",
+                   "selante", "desengraxante", "aromatizante", "abafador de escape", "abafador de escapamento", "ponteira de escape", "ponteira de escapamento", "catalisador",
+                   "lavadora de pressao",
                    "tweeter", "super tweeter", "selenium", "pneu aro", "kit lavagem", "carnauba",
                    # vistos em grupos de referência: marcas de estética/química automotiva
                    "proauto", "liqui moly", "vintex", "alumax", "restaurax", "caraiva", "easytech", "meguiars",
@@ -158,38 +159,116 @@ NICHOS: dict[str, dict] = {
                    "lavadora portatil", "mangueira para lavadora", "limpa estofado automotivo"],
         # ...e não pode conter nenhum destes (palavras que enganam: cueca "microfibra", celular "Moto G"...)
         "excluir": ["biblia", "livro", "livros", "colorir", "brinquedo", "brinquedos", "boneca", "pelucia",
+                    "facial", "fps", "hidratante",  # pele
+                    "compressor de ar direto", "engate rapido", "hidropneumatico",  # ferramenta de oficina
+                    "poste de ferro", "limitador de vaga", "redutor de engrenagem", "fresa quimica",  # nada a ver com carro
+                    "chapeu", "louca", "lava louca",  # boina de chapéu e detergente de louça casavam com "boina"/"pastilha" ("Ultra Fluido" casava com fluido de freio)
                     "mobile", "hot wheels", "devocional", "romance", "cafe com deus", "motorola", "moto g",
                     "celular", "smartphone", "cueca", "cuecas", "badminton", "oculos de sol", "aspirador vertical", "aspirador de po vertical", "passapano",
                     # moto é outro nicho (ver "moto" abaixo): modelos, peças e acessórios exclusivos de moto
                     "carenagem", "paralama", "cg", "titan", "bros", "biz", "pcx", "xre", "crf", "cbx", "ybr", "xtz", "nxr",
                     "yamaha", "suzuki", "kawasaki", "motocross", "enduro", "motoqueiro", "motoboy", "moto honda",
-                    "para moto", "de moto", "capacete", "viseira", "bau moto", "top case", "intercomunicador"],
+                    "para moto", "de moto", "capacete", "viseira", "bau moto", "top case", "intercomunicador",
+                    # ferramenta e EPI têm canal próprio (nicho "ferramentas"): nunca no automotivo, nem pela categoria do ML
+                    "parafusadeira", "furadeira", "esmerilhadeira", "esmeril", "lixadeira", "serra",
+                    "serrote", "plaina", "martelete", "rompedor", "soprador termico", "solda", "soldador", "soldagem", "inversora",
+                    "chave de impacto", "jogo de soquetes", "catraca", "bits", "broca", "brocas", "alicate", "torquimetro",
+                    "jogo de chaves", "jogo de chave", "chave allen", "chave torx", "chave combinada", "chave de fenda",
+                    "nivel laser", "nivel a laser", "trena", "multimetro", "pistola de pintura", "painel de secagem", "secagem",
+                    "compressor de ar eletrico", "epi", "mascara", "mascaras", "respirador", "pff2", "protecao auditiva",
+                    "protetor auricular", "tiro", "colete", "colete refletivo", "luva de trabalho", "luva de seguranca",
+                    "luva nitrilica", "oculos de protecao", "botina de seguranca", "bota de seguranca", "capacete de seguranca"],
+        "diversidade": {"espaco": 6, "max_dia": 4, "familia_janela": 4, "familia_max": 2},
+        "tipos": [
+            ("lavadora", "estetica", ["lavadora", "lava jato", "hidrolavadora", "canhao de espuma", "snow foam", "pistola de espuma",
+                                      "mangueira para lavadora", "bicos para lavadora"]),
+            ("som-falante", "som", ["alto falante", "falante", "triaxial", "tweeter", "woofer", "subwoofer", "caixa amplificada",
+                                    "amplificador", "som automotivo", "selenium"]),
+            ("multimidia", "som", ["multimidia", "carplay", "android auto", "radio", "dvd", "camera de re", "dashcam",
+                                   "camera veicular"]),
+            ("fonte-carregador", "eletrica", ["fonte automotiva", "inversor", "carregador de bateria", "auxiliar de partida",
+                                              "carregador veicular", "carregador veiculo", "wall box", "wallbox", "carregador"]),
+            ("bateria", "eletrica", ["bateria"]),
+            ("iluminacao", "eletrica", ["lampada", "led", "farol", "lanterna", "xenon"]),
+            ("pneu", "pneus", ["pneu", "aro", "calibrador", "inflador", "mini compressor", "compressor", "pretinho",
+                               "revitalizador de pneu"]),
+            ("suspensao", "mecanica", ["amortecedor", "bucha", "coxim", "batente", "mola", "pivo", "terminal", "bandeja"]),
+            ("freio", "mecanica", ["pastilha", "disco de freio", "fluido de freio", "freio"]),
+            ("oleo-fluido", "mecanica", ["oleo", "lubrificante", "aditivo", "fluido", "wd-40", "graxa", "liqui moly", "motul",
+                                         "castrol"]),
+            ("escape-filtro", "mecanica", ["filtro", "correia", "vela", "radiador", "escapamento", "silenciador", "catalisador",
+                                           "ponteira"]),
+            ("cadeirinha", "seguranca", ["cadeira para auto", "cadeira para carro", "cadeira infantil", "cadeirinha",
+                                         "bebe conforto", "isofix", "assento de carro", "assento"]),
+            ("macaco-estepe", "seguranca", ["macaco", "estepe", "triangulo", "chave de roda", "extintor", "guincho", "reboque",
+                                            "cinta"]),
+            ("cera-polidor", "estetica", ["cera", "carnauba", "polidor", "polimento", "composto", "politriz", "boina de polimento", "boina de espuma",
+                                          "vitrificador", "cristalizador", "descontaminante", "selante", "abrilhantador"]),
+            ("shampoo-limpeza", "estetica", ["shampoo", "desengraxante", "limpa", "limpador", "vonixx", "detailing", "microfibra",
+                                             "pano", "esponja", "aspirador", "kit lavagem"]),
+            ("aromatizante", "acessorios", ["aromatizante", "cheirinho", "cheiro", "gel carro"]),
+            ("volante-banco", "acessorios", ["volante", "capa de banco", "tapete", "quebra sol", "protetor solar", "para brisa",
+                                             "suporte", "organizador"]),
+            ("capa-chave", "acessorios", ["capa para chave", "chave"]),
+        ],
     },
     "country": {
         "emoji": "🤠", "nome": "Country (masculino e feminino)",
         "ml_buscas": ["jaqueta country", "camisa country", "bota country", "boné country", "calça country feminina",
                       "chapéu country", "cinto country", "bota texana", "camisa western", "fivela rodeio",
-                      "calça wrangler", "bolsa country", "chapéu cowboy", "colete country"],
+                      "calça wrangler", "bolsa country", "chapéu cowboy", "colete country",
+                      "calça jeans country masculina", "camisa agro brk", "calça ariat"],
         # categorias do ML onde ficam botas, bonés/chapéus, cintos, calças, camisas, jaquetas e camisetas
         "ml": {"MLB272202": "Botas", "MLB430275": "Bonés, Chapéus e Boinas", "MLB190393": "Cintos",
                "MLB188065": "Calças", "MLB107292": "Camisas", "MLB108803": "Casacos e Jaquetas",
                "MLB31447": "Camisetas e Regatas"},
         "amazon_dep": {"fashion": "Moda"},
         # a Amazon tem as marcas americanas de rodeio (Wrangler, Ariat, Cinch, Rock & Roll Denim)
-        "amazon_buscas": ["jaqueta country", "camisa country", "bota country", "boné country",
-                          "calça country", "chapéu country", "cinto country", "wrangler", "ariat",
-                          "cinch", "rock and roll denim", "bota western", "camisa western", "bolsa wrangler"],
+        "amazon_buscas": ["calça jeans ariat", "calça jeans cinch", "calça jeans wrangler masculina",
+                          "calça jeans ariat feminina", "calça rock and roll denim", "calça jeans country masculina",
+                          "jaqueta country", "camisa country", "bota country", "boné country",
+                          "chapéu country", "cinto country", "wrangler", "ariat",
+                          "cinch", "bota western", "camisa western", "bolsa wrangler"],
+        # Wrangler/Ariat/Cinch na Amazon vêm como "Enviado / Vendido Amazon Global" (a própria Amazon importando)
+        "amazon_global": True,
+        # o que mais vende e dá mais lucro no grupo: jeans importado das marcas de rodeio. Sai na frente de qualquer
+        # outra oferta (mesmo sem desconto) e as buscas deles rodam TODA rodada, sem esperar o rodízio da Amazon
+        "prioridade": {"marcas": ["ariat", "cinch", "wrangler", "rock and roll", "rock roll", "rock&roll"],
+                       "produtos": ["calca", "jeans"]},
+        "amazon_buscas_fixas": ["calça jeans ariat", "calça jeans cinch", "calça jeans wrangler masculina"],
         "shopee": ["jaqueta country", "camisa country", "bota country", "boné country",
                    "calça country", "chapéu country", "cinto country", "bota texana", "fivela rodeio"],
-        # estrito de propósito: "bota", "chapéu" e "fivela" sozinhos trazem bota de trabalho e chapéu de praia
+        # estrito de propósito: "bota", "chapéu" e "fivela" sozinhos trazem bota de trabalho e chapéu de praia, e
+        # "bico fino" é só o formato do sapato (bota Chelsea, sapato social). O título precisa de um termo de ESTILO
+        # (abaixo) E de um PRODUTO de moda ("produtos"): "Camisa Lampião Western" e "Encadernadora The Cinch" não passam.
         "termos": ["country", "western", "texana", "texano", "vaqueiro", "vaqueira", "peao", "rodeio",
-                   "boiadeiro", "boiadeira", "sertanejo", "cowboy", "cowgirl", "bico fino", "bico quadrado",
+                   "boiadeiro", "boiadeira", "sertanejo", "cowboy", "cowgirl",
                    # marcas de moda country/rodeio
                    "wrangler", "ariat", "cinch", "rock and roll", "rock roll", "rock&roll", "selff", "stetson",
                    "resistol", "justin boots", "tony lama", "twisted x", "durango", "ranch road", "tassa",
-                   "zenz", "mcountry", "texas farm"],
+                   "zenz", "mcountry", "texas farm", "brk", "agro", "fazendeiro"],
+        "produtos": ["bota", "botina", "boot", "bone", "chapeu", "hat", "camisa", "camiseta", "camisao", "shirt", "blusa",
+                     "regata", "calca", "jeans", "bermuda", "jaqueta", "colete", "casaco", "cinto", "fivela", "bolsa",
+                     "mochila", "lenco", "vestido", "saia", "macacao", "conjunto", "cueca", "meia", "gravata", "pochete"],
         "excluir": ["infantil", "capa de celular", "capa para celular", "brinquedo", "boneca", "boneco", "pelucia",
-                    "franja", "livro", "fantasia", "jeep", "pneu", "estepe", "carro", "automotivo", "figurino"],
+                    "franja", "livro", "fantasia", "jeep", "pneu", "estepe", "carro", "automotivo", "figurino",
+                    # não é moda: lampião, artesanato/papelaria, bijuteria e decoração
+                    "lampiao", "vela", "velas", "encadernadora", "craft", "artesanato", "scrapbook", "papel", "adesivo",
+                    "berloque", "pingente", "banhado", "joia", "brinco", "colar", "pulseira", "anel", "chaveiro",
+                    "miniatura", "quadro", "decoracao", "caneca", "toalha", "almofada", "cortina", "tapete",
+                    # bota que não é country
+                    "chelsea", "social", "galocha", "seguranca", "epi", "trabalho", "pvc", "safety"],
+        # jeans é o que mais vende no country: o tipo pode repetir com mais folga que nos outros nichos
+        "diversidade": {"espaco": 1, "max_dia": 15, "familia_max": 4},
+        "tipos": [
+            ("bota", "calcado", ["bota", "botina", "texana", "boot"]),
+            ("bone-chapeu", "acessorio", ["bone", "chapeu", "hat"]),
+            ("camisa", "roupa", ["camisa", "camiseta", "camisao", "shirt", "blusa", "regata"]),
+            ("calca", "roupa", ["calca", "jeans", "bermuda", "macacao", "vestido", "saia"]),
+            ("jaqueta", "roupa", ["jaqueta", "colete", "casaco"]),
+            ("cinto-fivela", "acessorio", ["cinto", "fivela"]),
+            ("bolsa", "acessorio", ["bolsa", "mochila", "lenco", "pochete"]),
+        ],
         "desconto_sugerido": 20,
     },
     "perfumes": {
@@ -213,7 +292,7 @@ NICHOS: dict[str, dict] = {
                    "perfume contratipo", "perfume oud", "perfume nicho", "perfume maison alhambra",
                    "perfume calvin klein", "perfume in the box"],
         "termos": ["perfume", "perfumes", "colonia", "deo colonia", "eau de parfum", "eau de toilette",
-                   "parfum", "body splash", "fragrancia", "edp", "edt", "kit perfume",
+                   "parfum", "body splash", "edp", "edt", "kit perfume",
                    # casas de perfumaria pura: valem sozinhas
                    "lattafa", "armaf", "afnan", "al haramain", "rasasi", "paco rabanne", "carolina herrera",
                    "jean paul gaultier", "azzaro", "issey miyake",
@@ -251,6 +330,12 @@ NICHOS: dict[str, dict] = {
                     "infantil", "capilar", "cabelo", "feromonio", "feromonios", "ambiente", "ambientes", "automotivo",
                     "carro", "carros", "roupa", "roupas", "tecido", "tecidos", "difusor", "vela", "pet", "cachorro",
                     "vazio", "frasco vazio", "essencia para",
+                    # produtos de limpeza/casa que só citam "fragrância" ou "perfumado" no título
+                    "detergente", "limpador", "limpeza", "limpa", "extratora", "extratoras", "lava roupa", "lava roupas",
+                    "amaciante", "desinfetante", "sabao", "multiuso", "odorizador", "aromatizador", "aromatizante",
+                    "banheiro", "cozinha", "wap", "sachet", "home spray", "bruma para",
+                    # perfume de criança / personagem
+                    "turma da monica", "cebolinha", "magali", "disney", "frozen", "patrulha canina", "kids", "baby", "bebe",
                     # produtos das mesmas marcas que não são perfume
                     "camiseta", "camisa", "cueca", "jeans", "bermuda", "blusa", "tenis", "relogio", "oculos", "bolsa",
                     "carteira", "batom", "base", "po compacto", "rimel", "sombra", "esmalte", "shampoo",
@@ -260,6 +345,40 @@ NICHOS: dict[str, dict] = {
                     "replica", "falsificado", "falsificada", "imitacao", "aaa", "primeira linha", "paralelo"],
         # falsificação é comum em perfume: só entra oferta de vendedor verificável (loja oficial)
         "exigir_loja_confiavel": True,
+        # variedade: casa/linha diferente a cada post e alternando árabe, grife e nacional
+        "diversidade": {"espaco": 5, "max_dia": 3, "familia_janela": 4, "familia_max": 2},
+        "familia_padrao": "grife",
+        "ruido_tipo": ["perfume", "parfum", "eau", "toilette", "colonia", "deo", "desodorante", "body", "splash", "edp", "edt",
+                       "original", "importado", "tradicional", "beauty"],
+        "tipos": [
+            ("lattafa", "arabe", ["lattafa"]),
+            ("armaf", "arabe", ["armaf", "club de nuit"]),
+            ("afnan", "arabe", ["afnan"]),
+            ("maison alhambra", "arabe", ["maison alhambra", "alhambra"]),
+            ("al wataniah", "arabe", ["al wataniah", "wataniah"]),
+            ("al haramain", "arabe", ["al haramain"]),
+            ("orientica", "arabe", ["orientica"]),
+            ("fragrance world", "arabe", ["fragrance world"]),
+            ("arabe", "arabe", ["arabe", "rasasi", "swiss arabian", "ajmal", "al rehab", "khadlaj", "french avenue", "zimaya",
+                                "pendora", "paris corner", "emper", "ard al zaafaran", "nabeel", "rave now", "oud", "oudh",
+                                "attar", "rayhaan"]),
+            ("armani", "grife", ["armani"]),
+            ("ralph lauren", "grife", ["ralph lauren", "polo"]),
+            ("carolina herrera", "grife", ["carolina herrera"]),
+            ("paco rabanne", "grife", ["paco rabanne", "rabanne"]),
+            ("jean paul gaultier", "grife", ["jean paul gaultier", "gaultier"]),
+            ("lancome", "grife", ["lancome"]),
+            ("calvin klein", "grife", ["calvin klein"]),
+            ("hugo boss", "grife", ["hugo boss"]),
+            ("montblanc", "grife", ["montblanc", "mont blanc"]),
+            ("azzaro", "grife", ["azzaro"]),
+            ("natura", "nacional", ["natura", "kaiak", "essencial"]),
+            ("boticario", "nacional", ["boticario", "o boticario", "malbec"]),
+            ("granado", "nacional", ["granado", "phebo"]),
+            ("jequiti", "nacional", ["jequiti"]),
+            ("eudora", "nacional", ["eudora", "avon", "hinode", "dumont"]),
+            ("body splash", "nacional", ["body splash", "splash"]),
+        ],
         "desconto_sugerido": 15,
     },
     "ferramentas": {
@@ -294,14 +413,17 @@ NICHOS: dict[str, dict] = {
                       "painel de ferramentas", "marreta", "formão", "paquímetro", "torquímetro", "serra circular", "soprador térmico",
                       "estação de solda", "compressor de ar", "pistola de pintura", "serra copo", "disco de corte", "alicate amperímetro",
                       "nível a laser", "trena a laser", "morsa de bancada", "rebitadeira", "grampeador", "refletor led",
-                      "chave de impacto", "lixadeira", "micro retífica", "furadeira de bancada", "kit de ferramentas completo"],
+                      "chave de impacto", "lixadeira", "micro retífica", "furadeira de bancada", "kit de ferramentas completo",
+                      "chiaperini", "tafort", "ferramentas chiaperini", "ferramentas tafort"],
         "amazon_dep": {"tools": "Ferramentas"},
-        "amazon_buscas": ["parafusadeira", "kit de ferramentas", "jogo de chaves", "furadeira", "alicate", "maleta de ferramentas"],
+        "amazon_buscas": ["parafusadeira", "kit de ferramentas", "jogo de chaves", "furadeira", "alicate", "maleta de ferramentas",
+                          "chiaperini", "tafort"],
         "shopee": ["kit de ferramentas", "jogo de chaves", "chave torx allen", "parafusadeira", "alicate", "maleta de ferramentas",
-                   "trena", "multímetro", "ferro de solda", "bolsa de ferramentas"],
+                   "trena", "multímetro", "ferro de solda", "bolsa de ferramentas", "chiaperini", "tafort"],
         # relevância (Amazon/Shopee e buscas): título com algum destes termos (frases específicas: "luva", "máscara" e
         # "lixa" sozinhas pegariam boxe, cosmético e lixa de unha)
         "termos": [
+            "chiaperini", "tafort",  # fabricantes de ferramentas
             "ferramenta", "ferramentas", "kit de ferramentas", "jogo de ferramentas", "jogo chaves", "kit chaves", "caixa de ferramentas", "maleta de ferramentas",
             "bolsa de ferramentas", "organizador de ferramentas", "organizador com divisorias", "painel perfurado", "painel de ferramentas",
             "bancada de trabalho", "carrinho de ferramentas", "gaveteiro de ferramentas", "cartucheira",
@@ -312,7 +434,7 @@ NICHOS: dict[str, dict] = {
             "estilete", "serrote", "arco de serra", "serra manual", "trena", "fita metrica", "nivel de bolha", "nivel a laser", "esquadro",
             "paquimetro", "micrometro", "prumo", "morsa", "grampo sargento", "sargento", "pe de cabra", "colher de pedreiro",
             "desempenadeira", "espatula",
-            "parafusadeira", "furadeira", "furadeira de impacto", "furadeira de bancada", "esmerilhadeira", "lixadeira",
+            "parafusadeira", "furadeira", "furadeira de impacto", "furadeira de bancada", "esmerilhadeira", "esmeril", "lixadeira",
             "serra tico-tico", "serra tico tico", "serra circular", "serra marmore", "serra sabre", "serra copo", "micro retifica",
             "retificadeira", "plaina eletrica", "tupia", "soprador termico", "pistola de ar quente", "pistola de cola quente",
             "cola quente", "ferro de solda", "estacao de solda", "maquina de solda", "inversora de solda", "pistola de pintura",
@@ -334,8 +456,55 @@ NICHOS: dict[str, dict] = {
                     "cortador de unha", "alicate de unha", "alicate de cuticula", "lixa de unha", "kit unha", "sobrancelha", "depilador",
                     "pinca", "tesoura de cabelo", "salao",
                     "maquiagem", "livro", "apostila", "curso", "software", "capa de celular", "carro de controle", "pet", "cachorro",
-                    "faca de cozinha", "utensilio"],
-        "desconto_sugerido": 20,
+                    "faca de cozinha", "utensilio", "culinaria", "cozinha", "churrasco", "alimento", "faxina", "limpeza", "galocha",
+                    # carro, lavadora e peça de carro são do nicho "automotivo" (e o que é de carro não entra aqui)
+                    "veicular", "veiculo", "veiculos", "carro", "carros", "pneu", "pneus", "lava jato", "lavadora", "lavadoras",
+                    "hidrolavadora", "caminhonete", "auxiliar de partida", "peugeot", "renault", "fiat", "volkswagen",
+                    "chevrolet", "eixo traseiro", "eixo dianteiro", "amortecedor", "oleo de motor", "polimento", "lustro"],
+        "diversidade": {"espaco": 6, "max_dia": 4, "familia_janela": 4, "familia_max": 2},
+        # (tipo, família, termos): o primeiro que casar vale; serve para não postar o mesmo TIPO de produto em sequência
+        "tipos": [
+            ("serra-manual", "manuais", ["serrote", "arco de serra", "serra manual"]),
+            ("furadeira", "eletricas", ["parafusadeira", "furadeira", "chave de impacto"]),
+            ("esmerilhadeira", "eletricas", ["esmerilhadeira", "esmeril", "retifica", "micro retifica"]),
+            ("lixadeira", "eletricas", ["lixadeira", "lixa eletrica"]),
+            ("serra", "eletricas", ["serra"]),
+            ("plaina", "eletricas", ["plaina", "tupia"]),
+            ("martelete", "eletricas", ["martelete", "rompedor"]),
+            ("mascara-solda", "eletricas", ["mascara de solda", "mascara solda"]),
+            ("respirador", "epi", ["mascara", "respirador", "pff2", "pff1", "filtro", "pre filtro"]),
+            ("solda", "eletricas", ["solda", "soldagem", "eletrodo", "inversora"]),
+            ("compressor-pintura", "eletricas", ["compressor", "pistola de pintura", "pulverizadora"]),
+            ("soprador-macarico", "eletricas", ["soprador termico", "pistola de ar quente", "macarico"]),
+            ("bits-brocas", "acessorios", ["broca", "bits", "ponta de chave", "disco de corte", "disco de desbaste",
+                                           "disco flap", "jogo de pontas", "kit de pontas"]),
+            ("lixa-disco", "acessorios", ["disco de lixa", "lixa", "folha de lixa", "interface", "disco"]),
+            ("chaves", "manuais", ["jogo de chaves", "jogo chaves", "kit chaves", "chave allen", "chave torx", "chave combinada",
+                                   "chave de boca", "chave estrela", "chave inglesa", "chave de fenda", "chave philips",
+                                   "chave phillips", "chave grifo", "chave fixa", "chave de precisao", "chave canhao",
+                                   "soquete", "catraca", "torquimetro"]),
+            ("alicate", "manuais", ["alicate", "decapador", "crimpador", "desencapador"]),
+            ("martelo", "manuais", ["martelo", "marreta", "talhadeira", "formao", "pe de cabra"]),
+            ("kit-ferramentas", "manuais", ["jogo de ferramentas", "kit de ferramentas", "kit ferramentas", "ferramentas manuais",
+                                            "kit eletricista", "kit eletrico"]),
+            ("grampo-morsa", "manuais", ["grampo sargento", "sargento", "morsa", "grampo", "grampeador", "rebitadeira", "pinador",
+                                         "estilete", "tesoura", "podador"]),
+            ("organizacao", "organizacao", ["maleta", "bolsa", "mala", "caixa de ferramentas", "caixa para ferramentas", "painel",
+                                            "organizador", "gaveteiro", "bancada", "carrinho", "cartucheira"]),
+            ("nivel", "medicao", ["nivel", "esquadro", "prumo"]),
+            ("medidor", "medicao", ["trena", "paquimetro", "medidor", "micrometro", "fita metrica", "termometro", "multimetro",
+                                    "detector", "amperimetro", "caneta teste"]),
+            ("bateria-ferramenta", "acessorios", ["bateria", "carregador"]),
+            ("protecao-auditiva", "epi", ["abafador", "protetor auricular", "protecao auditiva"]),
+            ("calcado-epi", "epi", ["bota", "botina", "coturno", "sapato de seguranca"]),
+            ("luva", "epi", ["luva"]),
+            ("oculos", "epi", ["oculos"]),
+            ("colete-capacete", "epi", ["colete", "capacete", "cinto de seguranca"]),
+            ("construcao", "construcao", ["colher de pedreiro", "desempenadeira", "riscador", "cortador de piso", "nivelador",
+                                          "espacador", "porcelanato", "ventosa", "massa corrida", "escada"]),
+            ("fita-cola", "acessorios", ["fita", "cola", "silicone", "veda rosca", "abracadeira", "parafuso", "bucha", "prego"]),
+            ("iluminacao-extensao", "acessorios", ["lanterna", "refletor", "extensao", "filtro de linha", "adaptador de tomada"]),
+        ],
     },
     "moto": {
         "emoji": "🏍️", "nome": "Moto",
@@ -365,6 +534,7 @@ NICHOS: dict[str, dict] = {
                     "strada", "saveiro", "siena", "fox", "polo", "golf", "civic", "corolla", "hilux", "ranger", "l200",
                     "fiat", "volkswagen", "vw", "chevrolet", "ford", "honda", "toyota", "hyundai", "renault", "nissan",
                     "peugeot", "citroen", "jeep", "mitsubishi", "kia", "mercedes", "scania", "volvo", "iveco"],
+        "diversidade": False,  # tudo é "ar condicionado": diversificar por tipo travaria o canal
         "desconto_sugerido": 10,  # ar condicionado raramente passa de 25% de desconto
     },
     "livros": {
@@ -403,6 +573,22 @@ def exige_loja_confiavel(chaves: list[str]) -> bool:
     return any(NICHOS.get(c, {}).get("exigir_loja_confiavel") for c in chaves)
 
 
+def prioritaria(titulo: str, chaves: list[str]) -> bool:
+    """A oferta é do que o canal mais quer postar (nicho "prioridade": marca + produto, como jeans Ariat/Cinch)?"""
+    t = _norm(titulo)
+    for c in chaves:
+        p = NICHOS.get(c, {}).get("prioridade")
+        if p and any(_casa(m, t) for m in p["marcas"]) and any(_casa(x, t) for x in p["produtos"]):
+            return True
+    return False
+
+
+def aceita_amazon_global(chaves: list[str]) -> bool:
+    """Algum nicho do canal aceita produto "Enviado / Vendido Amazon Global" (importado pela própria Amazon,
+    original)? Country: Wrangler, Ariat e Cinch só chegam assim."""
+    return any(NICHOS.get(c, {}).get("amazon_global") for c in chaves)
+
+
 def _norm(texto: str) -> str:
     """minúsculas, sem acento, só letras/números/hífen/espaço."""
     t = unicodedata.normalize("NFKD", texto.lower())
@@ -425,6 +611,23 @@ def categorias_confiaveis(chaves: list[str]) -> set[str]:
     return {cid for c in chaves if NICHOS.get(c, {}).get("ml_confiavel") for cid in NICHOS[c].get("ml", {})}
 
 
+def _aceita_nicho(n: dict, t: str, categoria: str | None) -> bool:
+    """O título (já normalizado) serve a ESTE nicho? Categoria confiável do ML prova sozinha; senão precisa de um
+    termo do nicho e, se o nicho define "produtos", também de um produto (estilo + produto: "Camisa Country")."""
+    if categoria and n.get("ml_confiavel") and categoria in n.get("ml", {}):
+        return True
+    termos = n.get("termos")
+    if not termos:
+        return True
+    produtos = n.get("produtos")
+    if produtos and not any(_casa(x, t) for x in produtos):
+        return False
+    if any(_casa(x, t) for x in termos):
+        return True
+    # marca "ambígua" (Dior, Natura...) só vale acompanhada de um sinal de fragrância no título
+    return any(_casa(m, t) for m in n.get("marcas", [])) and any(_casa(x, t) for x in n.get("sinais", []))
+
+
 def relevante(titulo: str, chaves: list[str], palavras=(), excluir=(), categoria: str | None = None) -> bool:
     """O título faz sentido para o canal? `chaves` são nichos do catálogo; `palavras`/`excluir`
     são termos próprios do canal; `categoria` é a categoria do ML de onde a oferta veio.
@@ -433,20 +636,73 @@ def relevante(titulo: str, chaves: list[str], palavras=(), excluir=(), categoria
         return True
     t = _norm(titulo)
     escolhidos = [NICHOS[c] for c in chaves if c in NICHOS]
-    barrar = [x for n in escolhidos for x in n.get("excluir", [])] + list(excluir)
-    if any(_casa(x, t) for x in barrar):
-        return False
-    if categoria and categoria in categorias_confiaveis(chaves):
-        return True
-    termos = [x for n in escolhidos for x in n.get("termos", [])] + list(palavras)
-    if not termos or any(not n.get("termos") for n in escolhidos):
-        return True
-    if any(_casa(x, t) for x in termos):
-        return True
-    # marca "ambígua" (Dior, Natura...) só vale acompanhada de um sinal de fragrância no título
-    marcas = [x for n in escolhidos for x in n.get("marcas", [])]
-    sinais = [x for n in escolhidos for x in n.get("sinais", [])]
-    return any(_casa(m, t) for m in marcas) and any(_casa(x, t) for x in sinais)
+    if any(_casa(x, t) for x in excluir):
+        return False  # exclusão do canal vale para tudo
+    if any(_casa(p, t) for p in palavras):
+        return not any(_casa(x, t) for n in escolhidos for x in n.get("excluir", []))
+    if not escolhidos:
+        return not palavras
+    # cada nicho tem as SUAS exclusões: "camisa" barra no nicho perfumes mas não pode barrar "Camisa Country"
+    return any(not any(_casa(x, t) for x in n.get("excluir", [])) and _aceita_nicho(n, t, categoria) for n in escolhidos)
+
+
+# ── Variedade: não postar o mesmo TIPO de produto em sequência ───────
+
+DIVERSIDADE_PADRAO = {"espaco": 6, "horas": 3, "max_dia": 4, "familia_janela": 4, "familia_max": 2}
+# palavras que não dizem o que o produto é (usadas só quando nenhum "tipo" do nicho casa)
+_RUIDO_TIPO = set("""
+kit jogo conjunto combo de da do das dos com sem para por em ao na no nas nos ou um uma peca pecas unidade unidades original
+originais profissional completo completa premium novo nova promocao oferta frete gratis qualidade alta alto resistente
+universal importado importada lancamento top super reforcado reforcada portatil recarregavel potente masculino masculina
+feminino feminina unissex adulto cor cores sortido varios varias bivolt sem fio
+""".split())
+
+
+def parametros_diversidade(chaves: list[str]) -> dict | None:
+    """Regras de variedade do canal (None = sem regra: nicho em que tudo é do mesmo tipo, como ar condicionado)."""
+    escolhidos = [NICHOS[c] for c in chaves if c in NICHOS]
+    if escolhidos and all(n.get("diversidade") is False for n in escolhidos):
+        return None
+    params = dict(DIVERSIDADE_PADRAO)
+    for n in escolhidos:
+        if isinstance(n.get("diversidade"), dict):
+            params.update(n["diversidade"])
+            break
+    return params
+
+
+def _tipo_generico(t: str, ruido_extra: set[str]) -> str:
+    """Sem tipo cadastrado: as duas primeiras palavras que dizem o que é ("compressor ar", "nivel laser")."""
+    palavras = []
+    for p in t.split():
+        if p.isdigit() or len(p) < 3 or re.fullmatch(r"\d+[a-z]{1,3}", p) or p in _RUIDO_TIPO or p in ruido_extra:
+            continue
+        if len(p) > 3 and p.endswith("s"):
+            p = p[:-1]
+        palavras.append(p)
+        if len(palavras) == 2:
+            break
+    return " ".join(palavras) or "sem-tipo"
+
+
+@lru_cache(maxsize=16384)
+def _tipo_de(titulo: str, chaves: tuple[str, ...]) -> tuple[str, str]:
+    t = _norm(titulo)
+    escolhidos = [NICHOS[c] for c in chaves if c in NICHOS]
+    for n in escolhidos:
+        for tipo, familia, termos in n.get("tipos", []):
+            if any(_casa(x, t) for x in termos):
+                return tipo, familia
+    ruido = {w for n in escolhidos for x in n.get("ruido_tipo", []) for w in _norm(x).split()}
+    tipo = _tipo_generico(t, ruido)
+    familia = next((n["familia_padrao"] for n in escolhidos if n.get("familia_padrao")), tipo)
+    return tipo, familia
+
+
+def tipo_de(titulo: str, chaves: list[str]) -> tuple[str, str]:
+    """(tipo, família) do produto para o canal: "Chave De Impacto 4.0ah Dobevi" e "Parafusadeira 21v Philco" caem no
+    mesmo tipo ("furadeira"); o pipeline usa isso para não repetir o tipo em sequência."""
+    return _tipo_de(titulo, tuple(chaves))
 
 
 def expandir(chaves: list[str]) -> dict:
@@ -471,4 +727,6 @@ def expandir(chaves: list[str]) -> dict:
         for kw in n.get("ml_buscas", []):
             if kw not in ml_buscas:
                 ml_buscas.append(kw)
-    return {"ml": ml, "amazon_dep": amazon_dep, "amazon_buscas": amazon_buscas, "shopee": shopee, "ml_buscas": ml_buscas}
+    fixas = list(dict.fromkeys(kw for k in chaves for kw in NICHOS.get(k, {}).get("amazon_buscas_fixas", [])))
+    return {"ml": ml, "amazon_dep": amazon_dep, "amazon_buscas": amazon_buscas, "shopee": shopee, "ml_buscas": ml_buscas,
+            "amazon_fixas": fixas}
