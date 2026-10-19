@@ -407,24 +407,55 @@ _RE_VENDIDO_AMAZON = re.compile(r"vendido\s+(?:por\s+|pela\s+)?amazon(?:\.com\.b
 _RE_AMAZON_GLOBAL = re.compile(r'vendido\s+(?:por\s+|pela\s+)?amazon\s+global(?!\w)', re.I)
 
 
+_vendedor_recusado: dict[tuple[str, bool], float] = {}  # (ASIN, aceita Amazon Global) -> quando a página mostrou outro vendedor
+RECHECAR_VENDEDOR_H = 12
+
+
 def vendedor_confiavel(o: Oferta, aceitar_global: bool = False) -> bool:
     """A página do produto diz que é vendido (e enviado) pela própria Amazon? Usado em perfumes, onde há
-    muita falsificação em vendedores terceiros. Sem conseguir ler a página, a resposta é não."""
+    muita falsificação em vendedores terceiros. Sem conseguir ler a página, a resposta é não.
+    Página lida e vendedor de fora: não abre de novo por 12h (antes o mesmo produto era aberto a cada rodada,
+    até 60 vezes por dia, o que gasta pedidos e chama o bloqueio da Amazon). Título curto ("Jeans Ariat") é
+    completado com o da página, que já está aberta."""
+    chave = (o.id_produto, aceitar_global)
+    if time.time() - _vendedor_recusado.get(chave, 0) < RECHECAR_VENDEDOR_H * 3600:
+        return False
     url = o.url_produto or f"https://www.amazon.com.br/dp/{o.id_produto}"
     try:
         r = _sessao().get(url, timeout=25)
         if r.status_code != 200 or _bloqueado(r.text):
+            log.info("Amazon não liberou a página do produto %s (HTTP %s): vendedor não verificado", o.id_produto, r.status_code)
             return False
         soup = BeautifulSoup(r.text, "lxml")
+        if len(o.titulo.split()) <= 3:
+            titulo = _titulo_da_pagina(soup)
+            if titulo and len(titulo.split()) > len(o.titulo.split()):
+                o.titulo = titulo
         blocos = soup.select("#merchant-info, #tabular-buybox, #fulfillerInfoFeature_feature_div, "
                              "#merchantInfoFeature_feature_div, #sellerProfileTriggerId")
         texto = " ".join(b.get_text(" ", strip=True) for b in blocos)
-        if _RE_VENDIDO_AMAZON.search(texto):
+        if _RE_VENDIDO_AMAZON.search(texto) or (aceitar_global and _RE_AMAZON_GLOBAL.search(texto)):
             return True
-        return aceitar_global and bool(_RE_AMAZON_GLOBAL.search(texto))
+        _vendedor_recusado[chave] = time.time()
+        log.info("Amazon %s: vendedor na página: %s", o.id_produto, texto[:120] or "(não informado)")
+        return False
     except Exception as e:
         log.warning("Não consegui verificar o vendedor na Amazon (%s): %s", o.id_produto, e)
         return False
+
+
+def _titulo_da_pagina(soup) -> str | None:
+    """Título do produto com o tamanho escolhido. Com espaço entre as partes: a Amazon monta o título em pedaços
+    e sem separador saía "Straight Jean ARIATMasculino"."""
+    el = soup.select_one("#productTitle")
+    if not el:
+        return None
+    titulo = re.sub(r"\s+", " ", el.get_text(" ", strip=True))
+    titulo = re.sub(r"\b([A-Z]{2,})([A-Z][a-zà-ú]{2,})", r"\1 \2", titulo)  # "ARIATMasculino" -> "ARIAT Masculino"
+    tam = _tamanho_selecionado(soup)
+    if titulo and tam and "tam" not in titulo.lower():
+        titulo = f"{titulo}, Tamanho {tam}"  # cada tamanho é um anúncio (ASIN) diferente: o título precisa dizer qual
+    return titulo or None
 
 
 def _tamanho_selecionado(soup) -> str | None:
@@ -448,8 +479,7 @@ def _detalhes(url: str):
             return None, None, None, None
         soup = BeautifulSoup(r.text, "lxml")
 
-        el = soup.select_one("#productTitle")
-        titulo = el.get_text(strip=True) if el else None
+        titulo = _titulo_da_pagina(soup)
 
         el = soup.select_one("#corePriceDisplay_desktop_feature_div .a-price .a-offscreen, .a-price .a-offscreen")
         preco = parse_preco_br(el.get_text()) if el else None
@@ -459,10 +489,6 @@ def _detalhes(url: str):
 
         el = soup.select_one("#landingImage")
         imagem = (el.get("data-old-hires") or el.get("src")) if el else None
-
-        tam = _tamanho_selecionado(soup)
-        if titulo and tam and "tam" not in titulo.lower():
-            titulo = f"{titulo}, Tamanho {tam}"  # cada tamanho é um anúncio (ASIN) diferente: o título precisa dizer qual
 
         return titulo, preco, preco_original, imagem
     except Exception as e:

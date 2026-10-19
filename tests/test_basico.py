@@ -1351,6 +1351,168 @@ class MarcasDeFerramentas(unittest.TestCase):
         self.assertIn("tafort", nichos.expandir(["ferramentas"])["ml_buscas"])
 
 
+class AnaliseDosRelatorios1013(unittest.TestCase):
+    def test_sem_desconto_so_vale_para_o_que_o_nicho_prioriza(self):
+        from ofertas.canais import Canal
+        perfumes = Canal(id="perfumes", nome="P", chat_id="-1", nichos=["perfumes"], aceitar_sem_desconto=True)
+        country = Canal(id="country", nome="C", chat_id="-2", nichos=["country"], aceitar_sem_desconto=True)
+        perfume = Oferta("amazon", "P1", "Armaf Oros Oumo Eau de Parfum 100ml", "x", preco=799.9, nota=4.5)
+        jeans = Oferta("amazon", "J1", "Ariat Calça jeans masculina M4 Boot Cut, Tamanho 32W x 34L", "x", preco=700, nota=None)
+        bolsa = Oferta("amazon", "B1", "Wrangler Bolsa de ombro feminina retrô western", "x", preco=300, nota=4.5)
+        with mock.patch.object(pipeline.db, "_DB", pathlib.Path(tempfile.mkdtemp()) / "a.db"),                 mock.patch.object(config, "desconto_minimo", 25), mock.patch.object(config, "exigir_loja_oficial", True):
+            self.assertEqual(pipeline.filtrar([perfume], perfumes), [])
+            self.assertEqual([o.id_produto for o in pipeline.filtrar([jeans, bolsa], country)], ["J1"])
+
+    def test_itens_que_vazaram_nos_relatorios_de_10_a_12(self):
+        from ofertas import nichos
+        fora_carro = ["SIAGE LEAVE IN CAPILAR SELANTE FINALIZADOR LISO INTENSO 100ml RPCK, Eudora Siàge",
+                      "Pneu Traseiro Levorin 90x90 Aro 18 Pra Moto Street Reforçado Sem câmara",
+                      "Pneu Dianteiro Pirelli 120/70-17 Diablo",
+                      "Óleo Stihl Castrol 8017H Motor 2 Tempos 500ml Lubrificante Para Roçadeira Motoserra",
+                      "Adaptador Impacto Soquete 3/4 Para 1/2 Aço Cromo-Molibdênio Profissional.",
+                      "Kit 2 Espatula Borracheiro Chata 450mm P/ Desmontar Pneus Teb450 - The Black Tools"]
+        for t in fora_carro:
+            self.assertFalse(nichos.relevante(t, ["automotivo"]), t)
+        self.assertFalse(nichos.relevante("Filtro de Ar Condicionado Bosch CB554-0986BF0554", ["arcondicionado"]))
+        self.assertTrue(nichos.relevante("Ar Condicionado Split Inverter 12000 Btus", ["arcondicionado"]))
+        self.assertFalse(nichos.relevante("Maleta AVB C30 Preta para Armas Curtas 30x20x8cm", ["ferramentas"]))
+        self.assertFalse(nichos.relevante("Composto Polidor 3 Em 1 Risco Zero 500g Cadillac", ["ferramentas"]))
+        for t in ["Ariat Calça jeans reta slim B5 para meninos, Tamanho 7",
+                  "Western Chief Bota de chuva feminina alta impermeável para jardim ao ar livre",
+                  "Wrangler Bolsa organizadora de maquiagem transparente de camada dupla para viagem"]:
+            self.assertFalse(nichos.relevante(t, ["country"]), t)
+        self.assertTrue(nichos.relevante("Ariat Calça jeans masculina M4 Boot Cut", ["country"]))
+
+
+class CamisasAgroLimitadas(unittest.TestCase):
+    def test_no_maximo_duas_camisas_agro_por_dia_no_country(self):
+        import time
+        from ofertas.nichos import parametros_diversidade, tipo_de
+        titulos = ["Kit 2 Camisas Agro Proteção Solar Uv Fazenda Roça Trator", "Camisa Agro Pecuaria Trator Agricultura Blusa Uv 50"]
+        self.assertEqual({tipo_de(t, ["country"])[0] for t in titulos}, {"camisa-agro"})
+        p = parametros_diversidade(["country"])
+        agora = time.time()
+        um = [("camisa-agro", "roupa", agora - 4 * 3600)]
+        dois = um + [("camisa-agro", "roupa", agora - 3 * 3600)]
+        self.assertFalse(pipeline._bloqueado_por_variedade("camisa-agro", "roupa", um, p, agora))
+        self.assertTrue(pipeline._bloqueado_por_variedade("camisa-agro", "roupa", dois, p, agora))
+        # camisa comum (jeans, camisa western) não entra nesse limite
+        self.assertFalse(pipeline._bloqueado_por_variedade("camisa", "roupa", dois, p, agora))
+
+
+class DescontoMinimoDoJeansImportado(unittest.TestCase):
+    def _filtrar(self, ofertas, historico=None):
+        from ofertas.canais import Canal
+        country = Canal(id="country", nome="C", chat_id="-1", nichos=["country"], aceitar_sem_desconto=True, desconto_minimo=20)
+        hist = historico or {}
+        with mock.patch.object(pipeline.db, "_DB", pathlib.Path(tempfile.mkdtemp()) / "d.db"),                 mock.patch.object(pipeline.db, "historico_preco", side_effect=lambda uid, dias=60: [("t", p) for p in hist.get(uid, [])]),                 mock.patch.object(config, "desconto_minimo", 20), mock.patch.object(config, "exigir_loja_oficial", True):
+            return [o.id_produto for o in pipeline.filtrar(ofertas, country)]
+
+    def test_sem_preco_de_nao_posta_jeans_no_pico_de_preco(self):
+        caro = Oferta("amazon", "CARO", "Ariat Calça jeans feminina R.e.a.l. Tamanho 40 BR", "x", preco=718.0, nota=4.4)
+        no_minimo = Oferta("amazon", "MIN", "Cinch Calça jeans masculina Silver Label Tamanho 42 BR", "x", preco=520.0, nota=4.4)
+        novo = Oferta("amazon", "NOVO", "Wrangler Calça jeans masculina Tamanho 44 BR", "x", preco=300.0, nota=4.4)
+        hist = {"amazon:CARO": [518.0, 600.0, 718.0], "amazon:MIN": [520.0, 540.0, 520.0], "amazon:NOVO": [300.0]}
+        self.assertEqual(self._filtrar([caro, no_minimo, novo], hist), ["MIN", "NOVO"])
+
+    def test_jeans_importado_com_preco_de_precisa_de_10_por_cento(self):
+        com_12 = Oferta("amazon", "J12", "Wrangler Calça jeans masculina George Strait Tamanho 40 BR", "x",
+                        preco=352.0, preco_original=400.0, nota=4.5)          # 12% de desconto
+        com_8 = Oferta("amazon", "J8", "Cinch Calça jeans masculina Tamanho 42 BR", "x",
+                       preco=368.0, preco_original=400.0, nota=4.5)           # 8%
+        camisa_12 = Oferta("amazon", "C12", "Wrangler Camisa western manga longa Tamanho G", "x",
+                           preco=352.0, preco_original=400.0, nota=4.5)       # 12%, mas não é o jeans prioritário
+        self.assertEqual(self._filtrar([com_12, com_8, camisa_12]), ["J12"])
+
+
+class AnaliseDosRelatorios1418(unittest.TestCase):
+    def test_itens_fora_do_nicho(self):
+        from ofertas import nichos
+        fora = {
+            "automotivo": ["Espátula Rejunte Raspador Calafetagem Silicone 3 Em 1 Rezzet Removedor E Aplicador De Selante",
+                           "Compressor Ar Direto 1,5hp P/ Poço Artesiano Csp60p Tekna",
+                           "Máquina Ventosa Vibrador P/ Porcelanato, Pisos + 2 Baterias",
+                           "Michelin City Extra 80/100-18 + 90/90-18",
+                           "Pneu Moto Traseiro 140/70-17 Twister Fazer Cb300 Pro Tork",
+                           "Pneu moto Pirelli Aro 19 MT60 90/90-19 52P TT Dianteiro montagem com câmara",
+                           "Kit Removedor De Odor De Xixi De Cão E Gato No Estofado",
+                           "Cera Líquida Auto Brilho Poliflor, Incolor, 750ml"],
+            "perfumes": ["Comfort Boom Perfume em Cristais Explosão de Frescor 275G"],
+            "ferramentas": ["Cinto catraca Couro Sintético Com Fivela De Ferro Automático Premium Cor Preto 125 cm",
+                            "Maçarico Portátil Com Regulagem Gourmet Com 12 Refil Marca - Liderança",
+                            "Colete Bicicleta Faixa Refletiva Corrida Segurança Refletivo",
+                            "Kit 10 Latas Cartucho Refil Gás 227g Para Fogareiro Maçarico Liderança"],
+        }
+        for nicho, titulos in fora.items():
+            cat = next(iter(nichos.NICHOS[nicho]["ml"]))  # vieram por categoria do ML: só as exclusões valem
+            for t in titulos:
+                self.assertFalse(nichos.relevante(t, [nicho], categoria=cat), t)
+        for t in ["Kit 2 Pneus 175/70R13 Goodyear Kelly Edge Touring 2 82T Aro 13", "Pneu 205/55r16 Goodyear Eagle Sport 2 91v Aro 16",
+                  "Suporte Veicular Com Ventosa Para-brisa Carro", "Limpa Estofado Automotivo Vonixx 500ml",
+                  "Lavadora de Alta Pressão Electrolux 1650PSI 1400W com Engate Rápido EasyWash Lava Jato"]:
+            self.assertTrue(nichos.relevante(t, ["automotivo"]), t)
+        self.assertTrue(nichos.relevante("Cinto Cinturão Ferramentas Eletricista Carpinteiro Pedreiro", ["ferramentas"]))
+
+    def test_jeans_boot_cut_e_jaqueta_jeans_tem_o_tipo_certo(self):
+        from ofertas.nichos import tipo_de
+        self.assertEqual(tipo_de("ARIAT Jeans feminino R.e.a.l. Perfect Rise Leila Boot Cut, Tamanho 26", ["country"])[0], "calca")
+        self.assertEqual(tipo_de("Wrangler Jaqueta jeans masculina forrada com corte caubói", ["country"])[0], "jaqueta")
+        self.assertEqual(tipo_de("Cinto Country Masculino de Couro, Fivela Longhorn, 95 cm para Calça 38", ["country"])[0], "cinto-fivela")
+        self.assertEqual(tipo_de("Bota Texana Feminina Cano Curto Bordada", ["country"])[0], "bota")
+
+    def test_jeans_importado_nao_espera_a_vez(self):
+        import time
+        from ofertas.nichos import parametros_diversidade
+        p = parametros_diversidade(["country"])
+        agora = time.time()
+        hist = [("calca", "roupa", agora - 600 * i) for i in range(5, 0, -1)]
+        self.assertFalse(pipeline._bloqueado_por_variedade("calca", "roupa", hist, p, agora, prioritario=True))
+        self.assertTrue(pipeline._bloqueado_por_variedade("calca", "roupa", hist, p, agora))  # calça comum continua esperando
+        cheio = [("calca", "roupa", agora - 60 * i) for i in range(30)]
+        self.assertTrue(pipeline._bloqueado_por_variedade("calca", "roupa", cheio, p, agora, prioritario=True))  # teto do dia
+        ofertas = [Oferta("amazon", f"J{i}", f"Ariat Calça jeans masculina M4 Boot Cut, Tamanho {30 + 2 * i}W x 34L", "x",
+                          preco=700) for i in range(4)]
+        from ofertas.canais import Canal
+        country = Canal(id="country", nome="C", chat_id="-1", nichos=["country"])
+        self.assertEqual(len(pipeline.escolher(ofertas, 3, country, hist)), 3)
+
+    def test_mesmo_modelo_com_titulo_diferente(self):
+        a = pipeline._nucleo("2Serra Mármore 110mm 1300W Com 2 Discos 4100NH3ZX2 Makita Profissional")
+        b = pipeline._nucleo("Serra Makita 4100nh3zx Mármore com 2 Discos Diámetro 110mm 1300W")
+        self.assertTrue(pipeline._mesmo_produto(a, 348.56, b, 348.56))
+        self.assertFalse(pipeline._mesmo_produto(a, 348.56, b, 599.0))  # preço muito diferente: outro kit
+        p1 = pipeline._nucleo("Kit 2 Pneus 175/70r14 Goodyear Kelly Edge 84T")
+        p2 = pipeline._nucleo("Kit 2 Pneus 175/70r14 Pirelli Cinturato P1 84T")
+        self.assertFalse(pipeline._mesmo_modelo(p1, p2))  # mesma medida não é o mesmo pneu
+
+    def test_ar_condicionado_repete_depois_de_3_dias(self):
+        from ofertas.nichos import dias_sem_repetir
+        self.assertEqual(dias_sem_repetir(["arcondicionado"]), 3)
+        self.assertIsNone(dias_sem_repetir(["country"]))
+
+    def test_titulo_da_amazon_sem_partes_grudadas(self):
+        from bs4 import BeautifulSoup
+        from ofertas.sources import amazon
+        html = '<span id="productTitle"><span>Jeans Ariat M7 Slim Wessley Straight Jean</span><span>ARIAT</span><span>Masculino</span></span>'
+        self.assertEqual(amazon._titulo_da_pagina(BeautifulSoup(html, "lxml")),
+                         "Jeans Ariat M7 Slim Wessley Straight Jean ARIAT Masculino")
+        html = '<span id="productTitle">Jeans Ariat M7 Slim Wessley Straight Jean ARIATMasculino</span>'
+        self.assertTrue(amazon._titulo_da_pagina(BeautifulSoup(html, "lxml")).endswith("ARIAT Masculino"))
+
+    def test_vendedor_recusado_nao_e_conferido_toda_rodada(self):
+        from ofertas.sources import amazon
+        o = Oferta("amazon", "B0TESTE01", "Calça jeans Ariat", "x")
+        pagina = mock.Mock(status_code=200, text='<html><title>x</title><span id="productTitle">ARIAT Calça jeans M7 Julian, '
+                           'Tamanho 31</span><div id="merchant-info">Vendido por Loja XYZ</div></html>')
+        with mock.patch.object(amazon, "_sessao") as s:
+            s.return_value.get.return_value = pagina
+            self.assertFalse(amazon.vendedor_confiavel(o, aceitar_global=True))
+            self.assertFalse(amazon.vendedor_confiavel(o, aceitar_global=True))
+            self.assertEqual(s.return_value.get.call_count, 1)
+        self.assertEqual(o.titulo, "ARIAT Calça jeans M7 Julian, Tamanho 31")
+        amazon._vendedor_recusado.pop(("B0TESTE01", True), None)
+
+
 class BloqueioDoML(unittest.TestCase):
     def test_pagina_de_verificacao_para_a_rodada(self):
         from ofertas.sources import mercadolivre

@@ -21,6 +21,7 @@ _MOTIVOS = {
     "mesmo_produto_ja_postado": "mesmo produto já postado (últimos dias)",
     "ja_postado": "link idêntico já postado",
     "desconto_baixo": "desconto abaixo do mínimo",
+    "preco_acima_do_menor_visto": "sem desconto listado e preço mais de 10% acima do menor já visto",
     "desconto_suspeito": "desconto suspeito (alto demais)",
     "nota_baixa": "nota baixa",
     "poucas_vendas": "poucas vendas",
@@ -82,9 +83,11 @@ def montar(desde: dt.datetime, ate: dt.datetime) -> tuple[str, list[tuple]]:
         conhecidos = [p for p in ps if p[7] is not None]
         descontos = [p[5] for p in ps if p[5]]
         precos = [p[3] for p in ps if p[3]]
+        sem = len(ps) - len(descontos)  # sem preço "de" (jeans importado): fora da média, mas avisado
+        media = f"{statistics.mean(descontos):.0f}%" if descontos else "-"
         linhas.append([nomes.get(cid, cid), len(ps), f"{len(ps) / dias:.1f}",
                        _pct(sum(1 for p in conhecidos if p[7]), len(conhecidos)) if conhecidos else "n/d",
-                       f"{statistics.mean(descontos):.0f}%" if descontos else "-",
+                       media + (f" ({sem} sem desconto)" if sem else ""),
                        _brl(statistics.median(precos)) if precos else "-"])
     linhas.append(["**Total**", len(posts), f"{len(posts) / dias:.1f}", "", "", ""])
     L += _tabela(["Canal", "Posts", "Posts/dia", "Loja oficial*", "Desconto médio", "Preço mediano"], linhas)
@@ -193,6 +196,10 @@ def montar(desde: dt.datetime, ate: dt.datetime) -> tuple[str, list[tuple]]:
             obs.append(f"**{nomes.get(cid, cid)}** postou só {n / dias:.1f} por dia. Para mais volume: afrouxar `desconto_minimo` do canal "
                        "ou ampliar o nicho/buscas.")
         total_desc = sum(descartes[cid].values())
+        recusadas = descartes[cid].get("amazon_vendedor_nao_confirmado", 0)
+        if boas[cid] and recusadas >= 0.5 * boas[cid]:
+            obs.append(f"**{nomes.get(cid, cid)}**: {_pct(recusadas, boas[cid])} das ofertas aprovadas pararam na conferência "
+                       "do vendedor da Amazon (a página não mostra “vendido pela Amazon”). A mesma oferta conta uma vez por rodada.")
         relevantes = total_desc - descartes[cid].get("fora_do_nicho", 0)
         if relevantes > 20:
             m, q = max(((m, q) for m, q in descartes[cid].items() if m != "fora_do_nicho"), key=lambda x: x[1])

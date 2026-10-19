@@ -159,8 +159,13 @@ NICHOS: dict[str, dict] = {
                    "lavadora portatil", "mangueira para lavadora", "limpa estofado automotivo"],
         # ...e não pode conter nenhum destes (palavras que enganam: cueca "microfibra", celular "Moto G"...)
         "excluir": ["biblia", "livro", "livros", "colorir", "brinquedo", "brinquedos", "boneca", "pelucia",
-                    "facial", "fps", "hidratante",  # pele
-                    "compressor de ar direto", "engate rapido", "hidropneumatico",  # ferramenta de oficina
+                    "facial", "fps", "hidratante", "capilar", "cabelo", "finalizador",  # pele e cabelo ("selante" casava com selante capilar)
+                    # "engate rapido" sozinho barrava lavadora ("com Engate Rápido EasyWash") e bico de lavadora
+                    "compressor de ar direto", "pneumatico", "pneumatica", "hidropneumatico", "soquete", "soquetes", "adaptador de impacto", "borracheiro",  # ferramenta de oficina
+                    "pra moto", "pneu traseiro", "pneu dianteiro", "pneu moto", "2 tempos", "rocadeira", "motoserra",  # moto e jardinagem
+                    # obra e casa que vêm por categoria cruzada do ML ou por um termo solto ("selante", "tekna", "cera liquida")
+                    "espatula", "rejunte", "calafetagem", "porcelanato", "ar direto", "poco artesiano",
+                    "poliflor", "moveis", "xixi", "cao e gato",
                     "poste de ferro", "limitador de vaga", "redutor de engrenagem", "fresa quimica",  # nada a ver com carro
                     "chapeu", "louca", "lava louca",  # boina de chapéu e detergente de louça casavam com "boina"/"pastilha" ("Ultra Fluido" casava com fluido de freio)
                     "mobile", "hot wheels", "devocional", "romance", "cafe com deus", "motorola", "moto g",
@@ -178,6 +183,8 @@ NICHOS: dict[str, dict] = {
                     "compressor de ar eletrico", "epi", "mascara", "mascaras", "respirador", "pff2", "protecao auditiva",
                     "protetor auricular", "tiro", "colete", "colete refletivo", "luva de trabalho", "luva de seguranca",
                     "luva nitrilica", "oculos de protecao", "botina de seguranca", "bota de seguranca", "capacete de seguranca"],
+        # pneu de moto pela medida (140/70-17, 90/90-19: hífen antes do aro); pneu de carro usa "R" (175/70R14)
+        "excluir_regex": [r"(?<!\d)\d{2,3} \d{2,3}-\d{2}(?!\d)"],
         "diversidade": {"espaco": 6, "max_dia": 4, "familia_janela": 4, "familia_max": 2},
         "tipos": [
             ("lavadora", "estetica", ["lavadora", "lava jato", "hidrolavadora", "canhao de espuma", "snow foam", "pistola de espuma",
@@ -251,22 +258,27 @@ NICHOS: dict[str, dict] = {
                      "regata", "calca", "jeans", "bermuda", "jaqueta", "colete", "casaco", "cinto", "fivela", "bolsa",
                      "mochila", "lenco", "vestido", "saia", "macacao", "conjunto", "cueca", "meia", "gravata", "pochete"],
         "excluir": ["infantil", "capa de celular", "capa para celular", "brinquedo", "boneca", "boneco", "pelucia",
-                    "franja", "livro", "fantasia", "jeep", "pneu", "estepe", "carro", "automotivo", "figurino",
+                    "franja", "livro", "fantasia", "menino", "meninos", "menina", "meninas", "kids", "juvenil",
+                    "maquiagem", "necessaire", "chuva", "jardim", "jeep", "pneu", "estepe", "carro", "automotivo", "figurino",
                     # não é moda: lampião, artesanato/papelaria, bijuteria e decoração
                     "lampiao", "vela", "velas", "encadernadora", "craft", "artesanato", "scrapbook", "papel", "adesivo",
                     "berloque", "pingente", "banhado", "joia", "brinco", "colar", "pulseira", "anel", "chaveiro",
                     "miniatura", "quadro", "decoracao", "caneca", "toalha", "almofada", "cortina", "tapete",
                     # bota que não é country
                     "chelsea", "social", "galocha", "seguranca", "epi", "trabalho", "pvc", "safety"],
-        # jeans é o que mais vende no country: o tipo pode repetir com mais folga que nos outros nichos
-        "diversidade": {"espaco": 1, "max_dia": 15, "familia_max": 4},
+        # jeans é o que mais vende no country: o tipo pode repetir com mais folga que nos outros nichos. O jeans
+        # importado (prioridade) nem espera a vez: só conta no teto do dia (o concorrente posta um por tamanho)
+        "diversidade": {"espaco": 1, "max_dia": 15, "familia_max": 4, "max_dia_por_tipo": {"camisa-agro": 2, "calca": 30}},
+        # a ordem importa (vale o primeiro que casar): "Jaqueta jeans" é jaqueta, "Jeans Boot Cut" é calça, não bota,
+        # e "Cinto ... para Calça 38" é cinto
         "tipos": [
-            ("bota", "calcado", ["bota", "botina", "texana", "boot"]),
-            ("bone-chapeu", "acessorio", ["bone", "chapeu", "hat"]),
-            ("camisa", "roupa", ["camisa", "camiseta", "camisao", "shirt", "blusa", "regata"]),
-            ("calca", "roupa", ["calca", "jeans", "bermuda", "macacao", "vestido", "saia"]),
             ("jaqueta", "roupa", ["jaqueta", "colete", "casaco"]),
             ("cinto-fivela", "acessorio", ["cinto", "fivela"]),
+            ("bone-chapeu", "acessorio", ["bone", "chapeu", "hat"]),
+            ("camisa-agro", "roupa", ["agro", "trator", "fazenda", "roca"]),  # muito parecidas entre vendedores: máx. 2 por dia
+            ("camisa", "roupa", ["camisa", "camiseta", "camisao", "shirt", "blusa", "regata"]),
+            ("calca", "roupa", ["calca", "jeans", "bermuda", "macacao", "vestido", "saia"]),
+            ("bota", "calcado", ["bota", "botina", "texana", "boot"]),
             ("bolsa", "acessorio", ["bolsa", "mochila", "lenco", "pochete"]),
         ],
         "desconto_sugerido": 20,
@@ -329,7 +341,7 @@ NICHOS: dict[str, dict] = {
         "excluir": ["porta perfume", "amostra", "decant", "atomizador vazio", "sabonete", "hidratante corporal",
                     "infantil", "capilar", "cabelo", "feromonio", "feromonios", "ambiente", "ambientes", "automotivo",
                     "carro", "carros", "roupa", "roupas", "tecido", "tecidos", "difusor", "vela", "pet", "cachorro",
-                    "vazio", "frasco vazio", "essencia para",
+                    "vazio", "frasco vazio", "essencia para", "cristais", "comfort",  # "Comfort Perfume em Cristais" é perfume de roupa
                     # produtos de limpeza/casa que só citam "fragrância" ou "perfumado" no título
                     "detergente", "limpador", "limpeza", "limpa", "extratora", "extratoras", "lava roupa", "lava roupas",
                     "amaciante", "desinfetante", "sabao", "multiuso", "odorizador", "aromatizador", "aromatizante",
@@ -453,6 +465,9 @@ NICHOS: dict[str, dict] = {
         ],
         # barra o que se parece com ferramenta mas não é (brinquedo, manicure, culinária...)
         "excluir": ["brinquedo", "brinquedos", "infantil", "boneca", "manicure", "pedicure", "cuticula", "esmalte", "cabelo", "barbear",
+                    "arma", "armas", "airsoft", "municao",  # maleta de arma não é ferramenta
+                    "composto polidor", "blindex", "piso tatil",  # cera de carro, ferragem de box e piso de acessibilidade
+                    "cinto catraca", "gourmet", "fogareiro", "bicicleta", "ciclismo",  # cinto de roupa, maçarico de cozinha, camping e bike
                     "cortador de unha", "alicate de unha", "alicate de cuticula", "lixa de unha", "kit unha", "sobrancelha", "depilador",
                     "pinca", "tesoura de cabelo", "salao",
                     "maquiagem", "livro", "apostila", "curso", "software", "capa de celular", "carro de controle", "pet", "cachorro",
@@ -528,13 +543,15 @@ NICHOS: dict[str, dict] = {
         "termos": ["ar condicionado", "ar-condicionado", "split", "btu", "btus", "evaporadora", "condensadora",
                    "climatizador", "suporte para ar condicionado", "limpa ar condicionado"],
         "excluir": ["automotivo", "automotiva", "veicular", "veiculo", "carro", "carros", "caminhao", "onibus", "trator",
-                    "caminhonete", "pickup", "moto", "12v", "24v", "capa protetora", "caixa evaporadora",
+                    "caminhonete", "pickup", "moto", "12v", "24v", "capa protetora", "caixa evaporadora", "filtro de ar condicionado", "bosch",
                     # peças de ar condicionado de carro vêm com o modelo do carro no título (Gol G2 G3 G4...)
                     "gol", "palio", "uno", "corsa", "celta", "fiesta", "ka", "hb20", "onix", "prisma", "fusca", "kombi",
                     "strada", "saveiro", "siena", "fox", "polo", "golf", "civic", "corolla", "hilux", "ranger", "l200",
                     "fiat", "volkswagen", "vw", "chevrolet", "ford", "honda", "toyota", "hyundai", "renault", "nissan",
                     "peugeot", "citroen", "jeep", "mitsubishi", "kia", "mercedes", "scania", "volvo", "iveco"],
         "diversidade": False,  # tudo é "ar condicionado": diversificar por tipo travaria o canal
+        # catálogo pequeno: com 7 dias sem repetir o canal zerou (15, 17 e 18/10). O mesmo aparelho volta após 3 dias
+        "nao_repetir_dias": 3,
         "desconto_sugerido": 10,  # ar condicionado raramente passa de 25% de desconto
     },
     "livros": {
@@ -639,11 +656,21 @@ def relevante(titulo: str, chaves: list[str], palavras=(), excluir=(), categoria
     if any(_casa(x, t) for x in excluir):
         return False  # exclusão do canal vale para tudo
     if any(_casa(p, t) for p in palavras):
-        return not any(_casa(x, t) for n in escolhidos for x in n.get("excluir", []))
+        return not any(_excluido(n, t) for n in escolhidos)
     if not escolhidos:
         return not palavras
     # cada nicho tem as SUAS exclusões: "camisa" barra no nicho perfumes mas não pode barrar "Camisa Country"
-    return any(not any(_casa(x, t) for x in n.get("excluir", [])) and _aceita_nicho(n, t, categoria) for n in escolhidos)
+    return any(not _excluido(n, t) and _aceita_nicho(n, t, categoria) for n in escolhidos)
+
+
+def _excluido(n: dict, t: str) -> bool:
+    """O título (normalizado) cai numa exclusão do nicho (termo ou padrão, como a medida de pneu de moto)?"""
+    return any(_casa(x, t) for x in n.get("excluir", [])) or any(re.search(r, t) for r in n.get("excluir_regex", []))
+
+
+def dias_sem_repetir(chaves: list[str]) -> int | None:
+    """Prazo próprio do nicho para não repetir o mesmo produto (None = o do config.yaml)."""
+    return next((NICHOS[c]["nao_repetir_dias"] for c in chaves if NICHOS.get(c, {}).get("nao_repetir_dias")), None)
 
 
 # ── Variedade: não postar o mesmo TIPO de produto em sequência ───────

@@ -10,7 +10,7 @@ geral:
   estilo_post: simples         # visual dos posts: "simples" (título, De/Por, cupom, link) ou "completo" (com selo de desconto, economia, nota e loja)
   link_visivel: true           # mostra também o link escrito no texto do post ("Compre aqui: ..."), além do botão
   aviso_amazon: "Como Associado da Amazon, eu ganho com compras qualificadas."  # frase exigida pelo contrato da Amazon; vai no fim dos posts da Amazon. "" = desliga
-  relatorio_hora: "21:00"      # hora em que o bot manda o relatório do dia no seu privado; "" = desliga
+  relatorio_hora: "23:45"      # hora em que o bot manda o relatório do dia no seu privado (depois do fim do horário ativo, para não perder os posts da noite); "" = desliga
 
 filtros:
   desconto_minimo: 25          # % mínimo de desconto para postar (ofertas automáticas)

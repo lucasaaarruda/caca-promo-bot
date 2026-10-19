@@ -13,7 +13,8 @@ from telegram.error import NetworkError, TimedOut
 
 from . import db
 from .canais import Canal
-from .nichos import aceita_amazon_global, exige_loja_confiavel, parametros_diversidade, prioritaria, relevante, tipo_de
+from .nichos import (aceita_amazon_global, dias_sem_repetir, exige_loja_confiavel, parametros_diversidade, prioritaria,
+                     relevante, tipo_de)
 from .config import config, dentro_do_horario
 from .models import Oferta
 from .sources import amazon, mercadolivre, mercadolivre_api, shopee
@@ -92,7 +93,8 @@ def filtrar(ofertas: list[Oferta], canal: Canal | None = None, motivos: Counter 
     excluir = canal.excluir if canal else []
     desconto_min = canal.desconto_minimo if canal and canal.desconto_minimo is not None else config.desconto_minimo
     exige_loja = _exige_loja(canal)
-    dias = max(DIAS_SIMILAR, config.nao_repetir_dias)
+    dias_nicho = dias_sem_repetir(nichos)  # nicho de catálogo pequeno (ar condicionado) repete antes
+    dias = dias_nicho or max(DIAS_SIMILAR, config.nao_repetir_dias)
     recentes = [(_nucleo(t), p) for t, p in db.produtos_recentes(canal_id, dias)]
     aprovadas = []
     for o in ofertas:
@@ -107,11 +109,16 @@ def filtrar(ofertas: list[Oferta], canal: Canal | None = None, motivos: Counter 
         if _repetido(_nucleo(o.titulo), o.preco, recentes):
             no("mesmo_produto_ja_postado")
             continue  # o mesmo produto (outro vendedor, cor, tamanho) que este canal já postou há pouco
-        if db.ja_postada(f"{canal_id}|{o.uid}", config.nao_repetir_dias):
+        if db.ja_postada(f"{canal_id}|{o.uid}", dias_nicho or config.nao_repetir_dias):
             no("ja_postado")
             continue
-        if desconto_min and (o.desconto or 0) < desconto_min:
-            if not (canal and canal.aceitar_sem_desconto and not o.desconto and _muito_vendido(o)):
+        dmin = min(desconto_min, DESCONTO_MIN_PRIORITARIO) if desconto_min and prioritaria(o.titulo, nichos) else desconto_min
+        if dmin and (o.desconto or 0) < dmin:
+            if canal and canal.aceitar_sem_desconto and not o.desconto and _sem_desconto_ok(o, nichos):
+                if not _muito_vendido(o) and _preco_alto(o):
+                    no("preco_acima_do_menor_visto")
+                    continue  # jeans importado sem preço "de": só posta se não estiver caro em relação ao que o bot já viu
+            else:
                 no("desconto_baixo")
                 continue
         if config.desconto_maximo and (o.desconto or 0) > config.desconto_maximo:
@@ -156,9 +163,30 @@ def _loja_aceita(o: Oferta) -> bool:
 
 def _muito_vendido(o: Oferta) -> bool:
     """Para canais que aceitam produto sem desconto listado: só os campeões de venda e bem avaliados."""
-    if o.plataforma == "amazon" and o.vendas is None and (o.nota or 0) >= 4.3:
-        return True  # a busca da Amazon não informa vendas: vale a nota
     return o.mais_vendido or ((o.nota is None or o.nota >= 4.5) and (o.vendas or 0) >= 500)
+
+
+DESCONTO_MIN_PRIORITARIO = 10   # % mínimo do jeans importado quando a loja mostra o preço "de" (o do canal é 20)
+TOLERANCIA_PRECO = 1.10         # sem preço "de": no máximo 10% acima do menor preço visto nos últimos 30 dias
+
+
+def _preco_alto(o: Oferta) -> bool:
+    """O preço está bem acima do menor que o bot já viu para este produto (últimos 30 dias)? Só julga com 3 ou
+    mais observações; produto novo passa."""
+    if not o.preco:
+        return False
+    vistos = [p for _, p in db.historico_preco(o.uid, 30)]
+    return len(vistos) >= 3 and o.preco > TOLERANCIA_PRECO * min(vistos)
+
+
+def _sem_desconto_ok(o: Oferta, nichos: list[str]) -> bool:
+    """Produto sem desconto listado que o canal aceita postar: campeão de vendas, ou o que o nicho mais quer
+    (jeans importado Ariat/Cinch/Wrangler no Country). A busca da Amazon não informa vendas nem preço "de": para
+    esses jeans vale a nota (quando existe) e o vendedor ser a própria Amazon, conferido antes de postar."""
+    if _muito_vendido(o):
+        return True
+    return (o.plataforma == "amazon" and o.vendas is None and (o.nota is None or o.nota >= 4.3)
+            and prioritaria(o.titulo, nichos))
 
 
 def _chave_similar(titulo: str) -> str:
@@ -208,6 +236,8 @@ def _nucleo(titulo: str) -> frozenset[str]:
     for p in re.findall(r"[a-z0-9]+", t):
         if p.isdigit() or len(p) < 3 or re.fullmatch(r"\d+[a-z]{1,3}", p):
             continue  # quantidades e medidas (46 peças, 1/4, 100ml, 12v) não distinguem o produto
+        if m := re.fullmatch(r"\d{1,2}([a-z]{4,})", p):
+            p = m.group(1)  # quantidade grudada na palavra: "2Serra Mármore" -> "serra"
         if len(p) > 3 and p.endswith("s"):
             p = p[:-1]
         if p not in _RUIDO:
@@ -236,14 +266,28 @@ def _mesmo_produto(a: frozenset[str], preco_a: float | None, b: frozenset[str], 
     tam_b = next((p for p in b if p.startswith("@tam:")), None)
     if tam_a and tam_b and tam_a != tam_b:
         return False  # mesmo jeans em outro tamanho: anúncio próprio, sai um post por tamanho
+    preco_parecido = bool(preco_a and preco_b and abs(preco_a - preco_b) / max(preco_a, preco_b) <= 0.20)
+    if preco_parecido and _mesmo_modelo(a, b):
+        return True  # "2Serra Mármore ... 4100NH3ZX2 Makita" e "Serra Makita 4100nh3zx Mármore": títulos diferentes, mesmo modelo
     if not _parecidos(a, b):
         return False
     inter, uniao = len(a & b), len(a | b)
     if inter / uniao >= 0.75:
         return True  # praticamente o mesmo título
-    if preco_a and preco_b:
-        return abs(preco_a - preco_b) / max(preco_a, preco_b) <= 0.20
-    return False
+    return preco_parecido
+
+
+def _codigos(nucleo: frozenset[str]) -> set[str]:
+    """Códigos de modelo do título (letras e números, 6+ caracteres: 4100nh3zx2, smv1300s). Medida de pneu
+    (55r16) não é modelo: pneus de marcas diferentes têm a mesma."""
+    return {p for p in nucleo if len(p) >= 6 and re.search(r"\d", p) and re.search(r"[a-z]", p)
+            and not re.fullmatch(r"\d{2,3}r\d{2}", p) and not p.startswith("@")}
+
+
+def _mesmo_modelo(a: frozenset[str], b: frozenset[str]) -> bool:
+    """Os dois títulos citam o mesmo código de modelo (igual, ou um é o outro com 1-2 caracteres a mais)?"""
+    return any(x == y or (x.startswith(y) or y.startswith(x)) and abs(len(x) - len(y)) <= 2
+               for x in _codigos(a) for y in _codigos(b))
 
 
 def _repetido(nucleo: frozenset[str], preco: float | None, outros) -> bool:
@@ -266,15 +310,20 @@ def carregar_historico(canal: Canal | None) -> Historico:
     return hist
 
 
-def _bloqueado_por_variedade(tipo: str, familia: str, hist: Historico, p: dict, agora: float | None = None) -> bool:
+def _bloqueado_por_variedade(tipo: str, familia: str, hist: Historico, p: dict, agora: float | None = None,
+                             prioritario: bool = False) -> bool:
     """Não repete o MESMO TIPO de produto em sequência (6 chaves de impacto seguidas, 3 compressores...).
     Bloqueia se: o tipo saiu num dos últimos `espaco` posts (dentro de `horas`); o tipo já saiu `max_dia` vezes
-    nas últimas 24h; ou a família (elétricas, árabes...) já ocupa `familia_max` dos últimos `familia_janela` posts."""
+    nas últimas 24h; ou a família (elétricas, árabes...) já ocupa `familia_max` dos últimos `familia_janela` posts.
+    O que o nicho mais quer (`prioritario`: jeans importado no Country) só respeita o teto do dia: esperar a vez
+    travava o canal, que de 15 a 18/10 deixou de postar dezenas de jeans aprovados."""
     agora = time.time() if agora is None else agora
+    if sum(1 for t, _, _ in hist if t == tipo) >= p.get("max_dia_por_tipo", {}).get(tipo, p["max_dia"]):
+        return True
+    if prioritario:
+        return False
     recentes = [h for h in hist if agora - h[2] <= p["horas"] * 3600]
     if any(t == tipo for t, _, _ in recentes[-p["espaco"]:]):
-        return True
-    if sum(1 for t, _, _ in hist if t == tipo) >= p["max_dia"]:
         return True
     return sum(1 for _, f, _ in recentes[-p["familia_janela"]:] if f == familia) >= p["familia_max"]
 
@@ -302,7 +351,7 @@ def escolher(ofertas: list[Oferta], n: int, canal: Canal | None = None, hist: Hi
                     continue
                 if params:
                     tipo, familia = tipo_de(o.titulo, canal.nichos)
-                    if _bloqueado_por_variedade(tipo, familia, hist, params, agora):
+                    if _bloqueado_por_variedade(tipo, familia, hist, params, agora, prioritaria(o.titulo, chaves)):
                         continue
                     hist.append((tipo, familia, agora))
                 vistas.append((nucleo, o.preco))
@@ -482,7 +531,8 @@ async def executar_ciclo(bot: Bot) -> int:
     for c in canais:  # o que ficou de fora só por parecer demais com o que acabou de sair
         p = parametros_diversidade(c.nichos)
         if p:
-            parecidas = sum(1 for o in boas[c.id] if _bloqueado_por_variedade(*tipo_de(o.titulo, c.nichos), historico[c.id], p))
+            parecidas = sum(1 for o in boas[c.id] if _bloqueado_por_variedade(*tipo_de(o.titulo, c.nichos), historico[c.id], p,
+                                                                               prioritario=prioritaria(o.titulo, c.nichos)))
             if parecidas:
                 motivos[c.id]["muito_parecido_em_sequencia"] += parecidas
     sobrou = {c.id: len(boas[c.id]) for c in canais}
