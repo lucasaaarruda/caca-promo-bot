@@ -1453,6 +1453,57 @@ class AnaliseDosRelatorios1418(unittest.TestCase):
             self.assertTrue(nichos.relevante(t, ["automotivo"]), t)
         self.assertTrue(nichos.relevante("Cinto Cinturão Ferramentas Eletricista Carpinteiro Pedreiro", ["ferramentas"]))
 
+    def test_bicicleta_fora_do_automotivo_mas_compressor_carro_moto_bike_fica(self):
+        from ofertas import nichos
+        cat = "MLB2238"  # Pneus e Acessórios: a categoria de onde vieram
+        for t in ["Câmara De Ar Bicicleta Pirelli Aro 26 Bico 33mm Grosso Balão Tipo da válvula Schrader",
+                  "Par Pneu Bike Pirelli Touring 700x35 Serve Aro 29 Mtb Urbano Cor Preto",
+                  "Pneu Bike Mtb Tubeless Kenda Booster Xc 29x2.20 60tpi K-series",
+                  "Pneu Kenda E-bike/scooter 16 K1039 Preto Tt Com Arame"]:
+            self.assertFalse(nichos.relevante(t, ["automotivo"], categoria=cat), t)
+        for t in ["Compressor de Ar Portátil Blackone 4000mAh Digital 150PSI Carro Moto Bike",
+                  "Mini Compressor de Ar Digital Portátil Recarregável USB-C Lumi para Pneus de Carro, Moto e Bicicleta",
+                  "Auxiliar de Partida Bateria e Compressor de Ar Portátil 6 em 1 Inteligente para Carro, Moto e Bicicleta",
+                  "Auxiliar Partida Bateria Portátil Compressor Pneu Moto Bike"]:
+            self.assertTrue(nichos.relevante(t, ["automotivo"], categoria=cat), t)
+
+    def test_mesmo_jeans_no_maximo_3_tamanhos_por_dia_e_nunca_seguidos(self):
+        base = "Jeans Rock & Roll Denim Double Barrel Liso Grande V Médio Vintage Wash Jeans, Medium Wash, {}"
+        ofertas = [Oferta("amazon", f"RR{i}", base.format(t), "x", preco=712.05)
+                   for i, t in enumerate(["31W x 36L", "33W x 32L", "36W x 36L", "30W x 36L", "36W x 34L"])]
+        outro = Oferta("amazon", "CI", "Cinch Calça jeans masculina Blue Label Carpenter folgada, Tamanho 42W / 34L", "x", preco=417.0)
+        from ofertas.canais import Canal
+        country = Canal(id="country", nome="C", chat_id="-1", nichos=["country"])
+        escolhidas = pipeline.escolher(ofertas + [outro], 6, country, [])
+        self.assertEqual([o.id_produto[:2] for o in escolhidas], ["RR", "CI"])  # os outros tamanhos ficam para depois
+        modelos = [pipeline._modelo(base.format(t)) for t in ["1W x 1L", "2W x 2L"]] + [pipeline._modelo(outro.titulo)]
+        self.assertFalse(pipeline._excesso_de_tamanhos(base.format("40W x 40L"), modelos))
+        modelos.append(pipeline._modelo(base.format("3W x 3L")))
+        modelos.append(pipeline._modelo(outro.titulo))
+        self.assertTrue(pipeline._excesso_de_tamanhos(base.format("40W x 40L"), modelos))  # 3 no dia: chega
+
+    def test_sem_preco_nao_posta(self):
+        from ofertas.canais import Canal
+        country = Canal(id="country", nome="C", chat_id="-1", nichos=["country"], aceitar_sem_desconto=True)
+        o = Oferta("amazon", "B00K13B47E", "Jeans Cinch, Tamanho 28W / 32L", "x", preco=None, nota=4.6)
+        with mock.patch.object(pipeline.db, "_DB", pathlib.Path(tempfile.mkdtemp()) / "p.db"):
+            self.assertEqual(pipeline.filtrar([o], country), [])
+
+    def test_titulo_limpo(self):
+        self.assertEqual(pipeline.limpar_titulo("Ar condicionado Hisense AW#8209;10CWBRVGU02 branco"),
+                         "Ar condicionado Hisense AW-10CWBRVGU02 branco")
+        self.assertEqual(pipeline.limpar_titulo("Jeans de modelagem reta Wrangler AuthenticsMasculino"),
+                         "Jeans de modelagem reta Wrangler Authentics Masculino")
+        self.assertEqual(pipeline.limpar_titulo("Perfume Masculino 100ml"), "Perfume Masculino 100ml")
+
+    def test_ferramentas_sem_cozinha_jardim_e_lavagem(self):
+        from ofertas import nichos
+        for t in ["Kit Completo Maçarico Multiuso Culinário Profissional Acendedor Churrasqueira Carvão",
+                  "Medidor Prime Digital De Ph Umidade Do Solo Temperatura Terra Luz Solar Plantas",
+                  "Luva De Açougueiro Anti Corte Malha De Aço Inox Fios Premium",
+                  "Adaptador Engate Rápido Conector Snow Foam 1/4 X Rosca Macho"]:
+            self.assertFalse(nichos.relevante(t, ["ferramentas"], categoria="MLB2527"), t)
+
     def test_jeans_boot_cut_e_jaqueta_jeans_tem_o_tipo_certo(self):
         from ofertas.nichos import tipo_de
         self.assertEqual(tipo_de("ARIAT Jeans feminino R.e.a.l. Perfect Rise Leila Boot Cut, Tamanho 26", ["country"])[0], "calca")
@@ -1470,8 +1521,9 @@ class AnaliseDosRelatorios1418(unittest.TestCase):
         self.assertTrue(pipeline._bloqueado_por_variedade("calca", "roupa", hist, p, agora))  # calça comum continua esperando
         cheio = [("calca", "roupa", agora - 60 * i) for i in range(30)]
         self.assertTrue(pipeline._bloqueado_por_variedade("calca", "roupa", cheio, p, agora, prioritario=True))  # teto do dia
-        ofertas = [Oferta("amazon", f"J{i}", f"Ariat Calça jeans masculina M4 Boot Cut, Tamanho {30 + 2 * i}W x 34L", "x",
-                          preco=700) for i in range(4)]
+        modelos = ["M4 Boot Cut", "M7 Slim Wessley", "M5 Adkins Slim", "M2 Relaxed Crawford"]
+        ofertas = [Oferta("amazon", f"J{i}", f"Ariat Calça jeans masculina {m}, Tamanho 32W x 34L", "x", preco=700)
+                   for i, m in enumerate(modelos)]
         from ofertas.canais import Canal
         country = Canal(id="country", nome="C", chat_id="-1", nichos=["country"])
         self.assertEqual(len(pipeline.escolher(ofertas, 3, country, hist)), 3)

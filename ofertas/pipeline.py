@@ -1,5 +1,6 @@
 import asyncio
 import datetime as dt
+import html
 import logging
 import random
 import re
@@ -70,6 +71,8 @@ def coletar() -> list[Oferta]:
         else:
             log.warning("Mercado Livre ativo mas sem sessão de afiliado — rode: uv run python -m ofertas ml-login")
 
+    for o in todas:
+        o.titulo = limpar_titulo(o.titulo)
     por_plataforma = {o.plataforma for o in todas}
     ativas = [("shopee", config.shopee_app_id and config.shopee_app_secret and config.fonte_shopee.get("ativa")),
               ("amazon", config.amazon_tag and config.fonte_amazon.get("ativa")),
@@ -78,6 +81,18 @@ def coletar() -> list[Oferta]:
         if ligada and nome not in por_plataforma:
             db.registrar_evento(f"fonte_vazia:{nome}")
     return todas
+
+
+def limpar_titulo(titulo: str | None) -> str | None:
+    """Defeitos que as lojas mandam no título: código HTML ("AW#8209;10CWBRVGU02", hífen do Hisense) e gênero
+    grudado ("Wrangler AuthenticsMasculino", "ARIATFeminino")."""
+    if not titulo:
+        return titulo
+    t = html.unescape(titulo)
+    t = re.sub(r"&?#(\d{2,5});", lambda m: chr(int(m.group(1))), t)  # entidade que chegou sem o "&"
+    t = t.replace("‑", "-")
+    t = re.sub(r"(?<=[A-Za-zà-ú])(Masculino|Feminino|Unissex|Masculina|Feminina)\b", r" \1", t)
+    return re.sub(r"\s{2,}", " ", t).strip()
 
 
 def filtrar(ofertas: list[Oferta], canal: Canal | None = None, motivos: Counter | None = None) -> list[Oferta]:
@@ -100,6 +115,9 @@ def filtrar(ofertas: list[Oferta], canal: Canal | None = None, motivos: Counter 
     for o in ofertas:
         if not o.titulo:
             continue
+        if o.preco is None:
+            no("sem_preco")
+            continue  # post sem preço (saiu "Jeans Cinch, Tamanho 28W / 32L" em 20/10): a busca não trouxe o valor
         if not relevante(o.titulo, nichos, palavras, excluir, o.categoria):
             no("fora_do_nicho")
             continue
@@ -200,7 +218,7 @@ kit jogo conjunto combo de da do das dos com sem para por em e a o um uma ao na 
 peca unidade unidades original originais profissional completo completa premium novo nova promocao oferta
 frete gratis barato qualidade alta alto resistente multiuso universal importado importada lancamento
 top super reforcado reforcada portatil recarregavel potente forte leve pratico pratica ideal
-masculino masculina feminino feminina unissex adulto cor cores sortido sortida varios varias
+masculino masculina feminino feminina unissex adulto cor cores sortido sortida varios varias tamanho
 """.split())
 
 
@@ -248,7 +266,10 @@ def _nucleo(titulo: str) -> frozenset[str]:
 
 
 def _parecidos(a: frozenset[str], b: frozenset[str]) -> bool:
-    """Títulos com muitas palavras em comum (Jaccard) ou um quase todo contido no outro?"""
+    """Títulos com muitas palavras em comum (Jaccard) ou um quase todo contido no outro? O marcador de tamanho fica
+    de fora (é tratado à parte): com ele, Ariat M5 Adkins e M7 Wessley no mesmo tamanho pareciam o mesmo jeans."""
+    a = frozenset(p for p in a if not p.startswith("@"))
+    b = frozenset(p for p in b if not p.startswith("@"))
     inter = len(a & b)
     if not inter:
         return False
@@ -298,6 +319,28 @@ def _repetido(nucleo: frozenset[str], preco: float | None, outros) -> bool:
 # (tipo, família, instante) do que o canal já postou: base da regra de variedade
 Historico = list[tuple[str, str, float]]
 
+MAX_TAMANHOS_DIA = 3  # o mesmo jeans em tamanhos diferentes: no máximo 3 por dia, nunca dois seguidos
+
+
+def _modelo(titulo: str) -> frozenset[str]:
+    """O produto sem o tamanho: os 7 tamanhos do mesmo jeans dão o mesmo modelo."""
+    return frozenset(p for p in _nucleo(titulo) if not p.startswith("@tam:"))
+
+
+def _excesso_de_tamanhos(titulo: str, modelos: list[frozenset[str]]) -> bool:
+    """`modelos`: o que o canal postou nas últimas 24h, do mais antigo ao mais novo. Na noite de 19/10 saíram 7
+    tamanhos do mesmo Rock & Roll Double Barrel em 18 minutos: cada tamanho é um anúncio, mas em sequência vira spam."""
+    if not any(p.startswith("@tam:") for p in _nucleo(titulo)):
+        return False
+    m = _modelo(titulo)
+    igual = lambda x: bool(x) and len(m & x) / len(m | x) >= 0.75
+    return bool(modelos) and igual(modelos[-1]) or sum(1 for x in modelos if igual(x)) >= MAX_TAMANHOS_DIA
+
+
+def carregar_modelos(canal: Canal | None) -> list[frozenset[str]]:
+    """Modelos (título sem tamanho) do que o canal postou nas últimas 24h, em ordem."""
+    return [_modelo(t) for t, _ in db.historico_canal(canal.id, 24)] if canal else []
+
 
 def carregar_historico(canal: Canal | None) -> Historico:
     """O que o canal postou nas últimas 24h (do banco), já classificado em tipo e família."""
@@ -328,11 +371,14 @@ def _bloqueado_por_variedade(tipo: str, familia: str, hist: Historico, p: dict, 
     return sum(1 for _, f, _ in recentes[-p["familia_janela"]:] if f == familia) >= p["familia_max"]
 
 
-def escolher(ofertas: list[Oferta], n: int, canal: Canal | None = None, hist: Historico | None = None) -> list[Oferta]:
+def escolher(ofertas: list[Oferta], n: int, canal: Canal | None = None, hist: Historico | None = None,
+             modelos: list[frozenset[str]] | None = None) -> list[Oferta]:
     """Top N por desconto, alternando plataformas, pulando variações do mesmo produto e (com `canal`) o mesmo
-    TIPO de produto em sequência: o que sai agora e o que o canal já postou (`hist`) contam juntos."""
+    TIPO de produto em sequência: o que sai agora e o que o canal já postou (`hist`) contam juntos. `modelos`
+    (títulos sem tamanho das últimas 24h) limita os tamanhos do mesmo jeans."""
     params = parametros_diversidade(canal.nichos) if canal else None
     hist = list(hist or [])
+    modelos = list(modelos or [])
     agora = time.time()
     filas: dict[str, list[Oferta]] = {}
     chaves = canal.nichos if canal else []
@@ -349,12 +395,15 @@ def escolher(ofertas: list[Oferta], n: int, canal: Canal | None = None, hist: Hi
                 nucleo = _nucleo(o.titulo)
                 if _repetido(nucleo, o.preco, vistas):
                     continue
+                if _excesso_de_tamanhos(o.titulo, modelos):
+                    continue
                 if params:
                     tipo, familia = tipo_de(o.titulo, canal.nichos)
                     if _bloqueado_por_variedade(tipo, familia, hist, params, agora, prioritaria(o.titulo, chaves)):
                         continue
                     hist.append((tipo, familia, agora))
                 vistas.append((nucleo, o.preco))
+                modelos.append(_modelo(o.titulo))
                 escolhidas.append(o)
                 break
             if len(escolhidas) >= n:
@@ -437,6 +486,7 @@ async def executar_ciclo(bot: Bot) -> int:
     por_canal = {c.id: 0 for c in canais}
     chaves_postadas: dict[str, list[tuple[frozenset[str], float | None]]] = {c.id: [] for c in canais}  # produtos já postados nesta rodada
     historico = {c.id: await asyncio.to_thread(carregar_historico, c) for c in canais}  # tipos postados nas últimas 24h
+    modelos = {c.id: await asyncio.to_thread(carregar_modelos, c) for c in canais}  # para não repetir tamanhos do mesmo jeans
     ml_ok = True
     postadas = 0
 
@@ -447,7 +497,7 @@ async def executar_ciclo(bot: Bot) -> int:
             boas[c.id] = [o for o in boas[c.id] if not _repetido(_nucleo(o.titulo), o.preco, chaves_postadas[c.id])
                           and (ml_ok or o.plataforma != "mercadolivre")]
             n = LOTE if not limite[c.id] else min(LOTE, limite[c.id] - por_canal[c.id])
-            lote[c.id] = escolher(boas[c.id], n, c, historico[c.id]) if n > 0 else []
+            lote[c.id] = escolher(boas[c.id], n, c, historico[c.id], modelos[c.id]) if n > 0 else []
         if not any(lote.values()):
             break
 
@@ -525,6 +575,7 @@ async def executar_ciclo(bot: Bot) -> int:
             postadas += 1
             por_canal[c.id] += 1
             chaves_postadas[c.id].append((_nucleo(o.titulo), o.preco))
+            modelos[c.id].append(_modelo(o.titulo))
             if parametros_diversidade(c.nichos):
                 historico[c.id].append((*tipo_de(o.titulo, c.nichos), time.time()))
 

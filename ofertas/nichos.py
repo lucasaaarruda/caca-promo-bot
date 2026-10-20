@@ -162,7 +162,7 @@ NICHOS: dict[str, dict] = {
                     "facial", "fps", "hidratante", "capilar", "cabelo", "finalizador",  # pele e cabelo ("selante" casava com selante capilar)
                     # "engate rapido" sozinho barrava lavadora ("com Engate Rápido EasyWash") e bico de lavadora
                     "compressor de ar direto", "pneumatico", "pneumatica", "hidropneumatico", "soquete", "soquetes", "adaptador de impacto", "borracheiro",  # ferramenta de oficina
-                    "pra moto", "pneu traseiro", "pneu dianteiro", "pneu moto", "2 tempos", "rocadeira", "motoserra",  # moto e jardinagem
+                    "pra moto", "pneu traseiro", "pneu dianteiro", "2 tempos", "rocadeira", "motoserra",  # moto e jardinagem
                     # obra e casa que vêm por categoria cruzada do ML ou por um termo solto ("selante", "tekna", "cera liquida")
                     "espatula", "rejunte", "calafetagem", "porcelanato", "ar direto", "poco artesiano",
                     "poliflor", "moveis", "xixi", "cao e gato",
@@ -183,8 +183,12 @@ NICHOS: dict[str, dict] = {
                     "compressor de ar eletrico", "epi", "mascara", "mascaras", "respirador", "pff2", "protecao auditiva",
                     "protetor auricular", "tiro", "colete", "colete refletivo", "luva de trabalho", "luva de seguranca",
                     "luva nitrilica", "oculos de protecao", "botina de seguranca", "bota de seguranca", "capacete de seguranca"],
-        # pneu de moto pela medida (140/70-17, 90/90-19: hífen antes do aro); pneu de carro usa "R" (175/70R14)
-        "excluir_regex": [r"(?<!\d)\d{2,3} \d{2,3}-\d{2}(?!\d)"],
+        # pneu de moto pela medida (140/70-17, 90/90-19: hífen antes do aro); pneu de carro usa "R" (175/70R14).
+        # Bicicleta (pneu, câmara de ar, colete) vem pela categoria "Pneus e Acessórios" do ML: barra quando o título é de
+        # bike e não cita carro ("Compressor Portátil para Carro, Moto e Bike" continua passando)
+        "excluir_regex": [r"(?<!\d)\d{2,3} \d{2,3}-\d{2}(?!\d)",
+                          r"^(?!.*\b(?:carro|carros|veicular|automotiv[ao]s?|automovel|automoveis|partida)\b)"
+                          r".*\b(?:bike|bikes|bicicleta|bicicletas|mtb|ciclismo|ciclista)\b"],
         "diversidade": {"espaco": 6, "max_dia": 4, "familia_janela": 4, "familia_max": 2},
         "tipos": [
             ("lavadora", "estetica", ["lavadora", "lava jato", "hidrolavadora", "canhao de espuma", "snow foam", "pistola de espuma",
@@ -468,6 +472,7 @@ NICHOS: dict[str, dict] = {
                     "arma", "armas", "airsoft", "municao",  # maleta de arma não é ferramenta
                     "composto polidor", "blindex", "piso tatil",  # cera de carro, ferragem de box e piso de acessibilidade
                     "cinto catraca", "gourmet", "fogareiro", "bicicleta", "ciclismo",  # cinto de roupa, maçarico de cozinha, camping e bike
+                    "culinario", "churrasqueira", "acendedor", "acougueiro", "plantas", "do solo", "snow foam",  # cozinha, jardim e lavagem de carro
                     "cortador de unha", "alicate de unha", "alicate de cuticula", "lixa de unha", "kit unha", "sobrancelha", "depilador",
                     "pinca", "tesoura de cabelo", "salao",
                     "maquiagem", "livro", "apostila", "curso", "software", "capa de celular", "carro de controle", "pet", "cachorro",

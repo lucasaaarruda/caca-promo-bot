@@ -21,6 +21,7 @@ _MOTIVOS = {
     "mesmo_produto_ja_postado": "mesmo produto já postado (últimos dias)",
     "ja_postado": "link idêntico já postado",
     "desconto_baixo": "desconto abaixo do mínimo",
+    "sem_preco": "loja não informou o preço",
     "preco_acima_do_menor_visto": "sem desconto listado e preço mais de 10% acima do menor já visto",
     "desconto_suspeito": "desconto suspeito (alto demais)",
     "nota_baixa": "nota baixa",
