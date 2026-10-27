@@ -140,13 +140,19 @@ def _vendedor_lider(seller_id) -> bool:
     return ok
 
 
-def _loja_ml(item: dict, consultar: bool = True) -> tuple[bool, str | None]:
-    """(vendedor verificado?, selo). Loja oficial vem no próprio item; MercadoLíder exige consultar o vendedor."""
+def _loja_ml(item: dict, consultar: bool = True) -> tuple[bool, bool, str | None]:
+    """(loja oficial?, vendedor líder?, selo). Loja oficial vem no próprio item; MercadoLíder exige
+    consultar o vendedor — só vale a pena quando algum canal realmente aceita esse nível (`consultar`)."""
     if item.get("official_store_id"):
-        return True, "🏪 Loja oficial"
-    if consultar and config.lojas_confiaveis == "oficial+lider" and item.get("seller_id")             and _vendedor_lider(item["seller_id"]):
-        return True, "🏅 MercadoLíder Platinum"
-    return False, None
+        return True, False, "🏪 Loja oficial"
+    if consultar and item.get("seller_id") and _vendedor_lider(item["seller_id"]):
+        return False, True, "🏅 MercadoLíder Platinum"
+    return False, False, None
+
+
+def _quer_lider() -> bool:
+    from .. import canais
+    return config.lojas_confiaveis == "oficial+lider" or canais.algum_aceita_lider()
 
 
 def _melhor_oferta(itens: dict | None) -> dict | None:
@@ -158,7 +164,7 @@ def _melhor_oferta(itens: dict | None) -> dict | None:
         return None
     barato = min(validas, key=lambda i: float(i["price"]))
     if barato.get("category_id") in CATEGORIAS_SENSIVEIS:
-        confiaveis = [i for i in validas if _loja_ml(i)[0]]
+        confiaveis = [i for i in validas if _loja_ml(i, consultar=False)[0]]  # só oficial: líder não entra na seleção
         if confiaveis:
             return min(confiaveis, key=lambda i: float(i["price"]))
     return barato
@@ -184,7 +190,11 @@ def oferta_de_catalogo(prod: dict, item: dict, categoria: str | None = None, cam
     if (item.get("shipping") or {}).get("free_shipping"):
         partes.append("🚚 Frete grátis")
     sensivel = (categoria or item.get("category_id")) in CATEGORIAS_SENSIVEIS or item.get("category_id") in CATEGORIAS_SENSIVEIS
-    confiavel, selo = _loja_ml(item, consultar=sensivel)
+    # perfumes nunca aceita líder (só oficial); nos demais, só consulta o vendedor se algum canal pediu esse nível
+    confiavel, lider, selo = _loja_ml(item, consultar=not sensivel and _quer_lider())
+    # o global "oficial+lider" já conta líder como confiável de cara; sem ele, só o canal com aceitar_lider conta
+    # (ver vendedor_lider, decidido por canal em pipeline._loja_aceita)
+    confiavel = confiavel or (lider and config.lojas_confiaveis == "oficial+lider")
     if selo:
         partes.append(selo)
 
@@ -202,6 +212,7 @@ def oferta_de_catalogo(prod: dict, item: dict, categoria: str | None = None, cam
         mais_vendido=campeao,
         # só afirma "não verificado" onde importa (perfumes); nas demais categorias fica "não informado"
         loja_confiavel=True if confiavel else (False if sensivel else None),
+        vendedor_lider=lider,
     )
 
 

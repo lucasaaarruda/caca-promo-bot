@@ -68,16 +68,15 @@ def _int(v) -> int | None:
         return None
 
 
-def _loja(n: dict) -> tuple[bool, str | None]:
-    """shopType da Open API: 1 = Shopee Mall (loja oficial), 2/4 = lojas Indicadas. Só a oficial é verificada;
-    no modo "oficial+lider" a Indicada também vale, se tiver nota e vendas altas."""
+def _loja(n: dict) -> tuple[bool, bool, str | None]:
+    """shopType da Open API: 1 = Shopee Mall (loja oficial), 2/4 = lojas Indicadas (contam como "líder" se
+    tiverem nota e vendas altas). (loja oficial?, vendedor líder?, selo)."""
     tipos = n.get("shopType") or []
     if 1 in tipos:
-        return True, "🏪 Loja oficial"
-    if config.lojas_confiaveis == "oficial+lider" and (2 in tipos or 4 in tipos):
-        if (_float(n.get("ratingStar")) or 0) >= 4.7 and (_int(n.get("sales")) or 0) >= 100:
-            return True, "🏅 Loja indicada"
-    return False, None
+        return True, False, "🏪 Loja oficial"
+    if (2 in tipos or 4 in tipos) and (_float(n.get("ratingStar")) or 0) >= 4.7 and (_int(n.get("sales")) or 0) >= 100:
+        return False, True, "🏅 Loja indicada"
+    return False, False, None
 
 
 def _node_para_oferta(n: dict) -> Oferta:
@@ -95,7 +94,10 @@ def _node_para_oferta(n: dict) -> Oferta:
             pass
     if n.get("sales"):
         partes.append(f"{n['sales']} vendidos")
-    confiavel, selo = _loja(n)
+    confiavel, lider, selo = _loja(n)
+    # o global "oficial+lider" já conta líder como confiável de cara; sem ele, só o canal com aceitar_lider conta
+    # (ver vendedor_lider, decidido por canal em pipeline._loja_aceita)
+    confiavel = confiavel or (lider and config.lojas_confiaveis == "oficial+lider")
     if selo:
         partes.append(selo)
 
@@ -113,6 +115,7 @@ def _node_para_oferta(n: dict) -> Oferta:
         nota=_float(n.get("ratingStar")),
         vendas=_int(n.get("sales")),
         loja_confiavel=confiavel,
+        vendedor_lider=lider,
     )
 
 

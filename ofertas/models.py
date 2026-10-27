@@ -19,6 +19,7 @@ class Oferta:
     mais_vendido: bool = False # veio da lista de mais vendidos da categoria (API do ML)
     categoria: str | None = None  # categoria de origem no ML (id), quando a fonte informa
     loja_confiavel: bool | None = None  # vendedor verificado (loja oficial etc.); None = a fonte não informa
+    vendedor_lider: bool = False  # MercadoLíder Platinum / Loja Indicada bem avaliada: não é oficial, mas é de confiança
 
     @property
     def uid(self) -> str:

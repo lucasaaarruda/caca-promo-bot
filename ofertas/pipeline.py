@@ -12,7 +12,7 @@ from dataclasses import replace
 from telegram import Bot
 from telegram.error import NetworkError, TimedOut
 
-from . import db
+from . import db, whatsapp
 from .canais import Canal
 from .nichos import (aceita_amazon_global, dias_sem_repetir, exige_loja_confiavel, parametros_diversidade, prioritaria,
                      relevante, tipo_de)
@@ -121,7 +121,7 @@ def filtrar(ofertas: list[Oferta], canal: Canal | None = None, motivos: Counter 
         if not relevante(o.titulo, nichos, palavras, excluir, o.categoria):
             no("fora_do_nicho")
             continue
-        if exige_loja and not _loja_aceita(o):
+        if exige_loja and not _loja_aceita(o, canal):
             no("vendedor_nao_verificado")
             continue  # só vendedor verificado (loja oficial)
         if _repetido(_nucleo(o.titulo), o.preco, recentes):
@@ -174,9 +174,14 @@ def _exige_loja(canal: Canal | None) -> bool:
     return config.exigir_loja_oficial and not canal.aceitar_loja_comum
 
 
-def _loja_aceita(o: Oferta) -> bool:
-    """Vendedor verificado. A Amazon só se confirma na página do produto, feito logo antes de postar."""
-    return o.loja_confiavel is True or (o.loja_confiavel is None and o.plataforma == "amazon")
+def _loja_aceita(o: Oferta, canal: Canal | None = None) -> bool:
+    """Vendedor verificado. A Amazon só se confirma na página do produto, feito logo antes de postar.
+    MercadoLíder/Loja Indicada conta só para quem aceita esse nível (o global `lojas_confiaveis: oficial+lider`
+    ou o canal com `aceitar_lider`)."""
+    if o.loja_confiavel is True or (o.loja_confiavel is None and o.plataforma == "amazon"):
+        return True
+    aceita_lider = config.lojas_confiaveis == "oficial+lider" or (canal is not None and canal.aceitar_lider)
+    return bool(aceita_lider and o.vendedor_lider)
 
 
 def _muito_vendido(o: Oferta) -> bool:
@@ -511,12 +516,21 @@ async def executar_ciclo(bot: Bot) -> int:
         links: dict[tuple[str, str], str] = {}  # (canal_id, uid) -> link de afiliado do ML
         if grupos:
             try:
-                await asyncio.to_thread(mercadolivre.gerar_links_por_etiqueta,
-                                        {e: list(g.values()) for e, g in grupos.items()})
+                # Timeout: se o Chrome do Linkbuilder travar (perfil preso, processo zumbi, rede
+                # caindo no meio da automação), isso já derrubou o bot inteiro sem traceback nenhum
+                # — melhor falhar essa rodada do que deixar a thread pendurada para sempre.
+                await asyncio.wait_for(
+                    asyncio.to_thread(mercadolivre.gerar_links_por_etiqueta,
+                                      {e: list(g.values()) for e, g in grupos.items()}),
+                    timeout=180,
+                )
                 for c in canais:
                     for o in lote[c.id]:
                         if o.plataforma == "mercadolivre":
                             links[(c.id, o.uid)] = grupos[_etiqueta(c)][o.uid].url_afiliado
+            except TimeoutError:
+                log.error("Linkbuilder ML travou (sem resposta em 180s) — pulando links desta rodada")
+                db.registrar_evento("ml_link_falhou", "Linkbuilder travou (timeout de 180s)")
             except Exception as e:
                 log.error("Linkbuilder ML falhou: %s", e)
                 db.registrar_evento("ml_sessao" if "Sessão" in str(e) else "ml_link_falhou", str(e))
@@ -555,7 +569,14 @@ async def executar_ciclo(bot: Bot) -> int:
             db.registrar(o, c.id)  # antes de postar: se o processo cair no meio, não reposta
             try:
                 extras = {"cupom": c.cupom} if c.cupom and o.plataforma == "mercadolivre" and not o.cupom else {}
-                await postar_oferta(bot, replace(o, url_afiliado=link, **extras), c.chat_id)
+                o_final = replace(o, url_afiliado=link, **extras)
+                await postar_oferta(bot, o_final, c.chat_id)
+                if c.whatsapp_grupo and whatsapp.configurado():
+                    try:
+                        await asyncio.to_thread(whatsapp.postar_oferta, o_final, c.whatsapp_grupo)
+                    except Exception as e:
+                        log.error("Falha ao postar no WhatsApp (%s): %s", c.nome, e)
+                        db.registrar_evento("falha_post_whatsapp", f"{c.id}: {e}")
             except (NetworkError, TimedOut) as e:
                 # queda de conexão: não é problema do canal. A oferta volta na próxima rodada e o aviso é raro
                 log.error("Falha de rede ao postar '%s' em %s: %s", o.titulo[:60], c.nome, e)

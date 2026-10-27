@@ -88,6 +88,9 @@ PAGINA = r"""<!doctype html>
   .form-canal{margin-top:16px;padding:16px;border:1px dashed var(--ac);border-radius:12px}
   .form-canal h3{margin:0 0 12px;font-size:15px}
   a{color:var(--ac2)}
+  .warnbox{background:color-mix(in srgb,var(--warn) 14%,transparent);border:1px solid var(--warn);
+           border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:14px}
+  .qr{max-width:240px;display:block;border-radius:10px;border:1px solid var(--bd);margin-top:10px}
 </style>
 </head>
 <body>
@@ -152,9 +155,13 @@ PAGINA = r"""<!doctype html>
         <label>Nunca postar títulos com <span class="muted">(opcional)</span></label>
         <textarea id="c_excluir" rows="2" placeholder="separe por vírgula. Ex.: infantil, capinha"></textarea>
       </div>
-      <label style="display:flex;gap:8px;align-items:flex-start;margin:0 0 14px;font-size:13.5px">
+      <label style="display:flex;gap:8px;align-items:flex-start;margin:0 0 10px;font-size:13.5px">
         <input type="checkbox" id="c_semdesc" style="margin-top:3px">
         <span>Aceitar também produtos <b>sem desconto listado</b>, se forem muito vendidos (500+) e bem avaliados. <span class="muted">Sai do padrão de “só promoção”: use com moderação.</span></span>
+      </label>
+      <label style="display:flex;gap:8px;align-items:flex-start;margin:0 0 14px;font-size:13.5px">
+        <input type="checkbox" id="c_lider" style="margin-top:3px">
+        <span>Aceitar também <b>MercadoLíder Platinum</b> / Loja Indicada bem avaliada (não só loja oficial). <span class="muted">Mais volume, menos rígido — evite em nichos com risco de falsificação (ex.: perfumes).</span></span>
       </label>
       <div class="row2">
         <div class="fld" style="flex:1"><label>Desconto mínimo (%) <span class="muted">(vazio = padrão)</span></label><input id="c_desc" type="number" min="0" max="90"></div>
@@ -165,6 +172,12 @@ PAGINA = r"""<!doctype html>
         <div class="fld" style="flex:1"><label>Tag da Amazon só deste canal <span class="muted">(opcional)</span></label><input id="c_amztag" placeholder="Ex.: seusite-auto-20"></div>
       </div>
       <div class="fld"><label>Cupom do ML deste canal <span class="muted">(opcional)</span></label><input id="c_cupom" placeholder="Ex.: OFERTAS"></div>
+      <div class="fld">
+        <label>Grupo do WhatsApp <span class="muted">(opcional — JID, termina em @g.us)</span></label>
+        <input id="c_wpp" placeholder="Ex.: 120363012345678901@g.us">
+        <div class="help">Configure a Evolution API no card "WhatsApp" abaixo primeiro. O ID do grupo
+          aparece nos logs da Evolution API depois que o número (já conectado) participar dele uma vez.</div>
+      </div>
       <div class="help" style="margin:-6px 0 14px">
         Com etiqueta/tag própria, o painel de afiliados do ML e da Amazon mostra cliques e comissões de cada canal
         <b>em separado</b> — assim você descobre qual nicho rende mais. Crie antes: no ML em Linkbuilder → “Etiqueta em uso”;
@@ -174,6 +187,48 @@ PAGINA = r"""<!doctype html>
         <button class="pri" onclick="salvarCanal()">💾 Salvar canal</button>
         <button onclick="fecharForm()">Cancelar</button>
       </div>
+    </div>
+  </div>
+
+  <!-- WhatsApp -->
+  <div class="card">
+    <h2><span class="n">📱</span> WhatsApp (Evolution API)</h2>
+    <div class="warnbox">
+      ⚠️ Isto automatiza uma sessão comum de WhatsApp (via Evolution API) — <b>não é a API oficial da Meta</b>.
+      Use sempre um <b>número novo e dedicado</b> (chip ou eSIM separado do seu pessoal): o WhatsApp pode banir
+      o número por automação, e não há garantia nem recurso contra isso.
+    </div>
+    <div class="fld">
+      <label>URL da Evolution API</label>
+      <input id="w_url" placeholder="Ex.: http://localhost:8080">
+      <div class="help">O endereço onde sua instância da Evolution API está rodando.</div>
+    </div>
+    <div class="row2">
+      <div class="fld" style="flex:1"><label>Nome da instância</label><input id="w_instance" placeholder="Ex.: bot-ofertas"></div>
+      <div class="fld" style="flex:1">
+        <label>Chave (apikey) <span class="tick" id="w_tick"></span></label>
+        <input id="w_apikey" type="password" placeholder="">
+      </div>
+    </div>
+    <div class="row">
+      <button class="pri" onclick="salvarWpp()">💾 Salvar</button>
+      <button onclick="acaoWpp('criar-instancia')">➕ Criar instância</button>
+      <button onclick="conectarWpp()">🔌 Conectar (QR code)</button>
+      <button onclick="acaoWpp('status')">🔎 Ver status</button>
+      <button onclick="acaoWpp('desconectar')">🔌 Desconectar</button>
+    </div>
+    <p class="muted" id="w_status" style="margin-top:10px">—</p>
+    <div id="w_qrbox"></div>
+    <div class="fld" style="margin-top:14px">
+      <label>Testar envio <span class="muted">(opcional)</span></label>
+      <div class="row">
+        <input id="w_testegrupo" placeholder="JID do grupo (Ex.: 120363...@g.us)" style="flex:1">
+        <button onclick="testarWpp()">📨 Enviar teste</button>
+      </div>
+    </div>
+    <div class="help" style="margin-top:6px">
+      Depois de conectar aqui, abra cada canal acima (seção "Canais" → editar) e preencha o campo
+      "Grupo do WhatsApp" com o JID de cada grupo. O bot passa a postar nos dois lugares ao mesmo tempo.
     </div>
   </div>
 
@@ -346,6 +401,8 @@ function desenharCanais(){
       + (c.palavras.length ? `<span class="badge">🔤 ${c.palavras.length} palavra(s)-chave</span>` : "")
       + (c.aceitar_sem_desconto ? `<span class="badge">🏷 aceita produto sem desconto</span>` : "")
       + (c.ml_etiqueta || c.amazon_tag ? `<span class="badge">📈 medido em separado</span>` : "")
+      + (c.whatsapp_grupo ? `<span class="badge">📱 também no WhatsApp</span>` : "")
+      + (c.aceitar_lider ? `<span class="badge">🏅 aceita MercadoLíder</span>` : "")
       + (!c.nichos.length && !c.palavras.length ? `<span class="badge">⚠️ sem filtro: posta de tudo</span>` : "");
     return `<div class="canal ${c.ativo?'':'off'}">
       <span class="emo">${esc(c.emoji)}</span>
@@ -386,7 +443,9 @@ function abrirForm(c, idx){
   $("#c_palavras").value = c.palavras.join(", "); $("#c_excluir").value = c.excluir.join(", ");
   $("#c_desc").value = c.desconto_minimo ?? ""; $("#c_max").value = c.max_posts_por_ciclo ?? "";
   $("#c_semdesc").checked = !!c.aceitar_sem_desconto;
+  $("#c_lider").checked = !!c.aceitar_lider;
   $("#c_mletq").value = c.ml_etiqueta || ""; $("#c_amztag").value = c.amazon_tag || ""; $("#c_cupom").value = c.cupom || "";
+  $("#c_wpp").value = c.whatsapp_grupo || "";
   NICHOS_SEL = new Set(c.nichos); desenharNichos();
   $("#idsBoxCanal").classList.add("hide");
   $("#formCanal").classList.remove("hide");
@@ -418,7 +477,9 @@ async function salvarCanal(){
     nichos: [...NICHOS_SEL], palavras: lista($("#c_palavras").value), excluir: lista($("#c_excluir").value),
     desconto_minimo: num($("#c_desc").value), max_posts_por_ciclo: num($("#c_max").value),
     aceitar_sem_desconto: $("#c_semdesc").checked,
+    aceitar_lider: $("#c_lider").checked,
     ml_etiqueta: $("#c_mletq").value.trim(), amazon_tag: $("#c_amztag").value.trim(), cupom: $("#c_cupom").value.trim(),
+    whatsapp_grupo: $("#c_wpp").value.trim(),
   };
   if(!c.nome || !c.chat_id){ toast("Preencha o nome e o ID do canal.", true); return; }
   if(!c.nichos.length && !c.palavras.length &&
@@ -457,11 +518,51 @@ async function iniciarAgora(){
   setTimeout(atualizar, 4000);
 }
 
+// ── WhatsApp (Evolution API) ──────────────────────────────────────────
+async function carregarWpp(){
+  const c = await (await fetch("/api/whatsapp")).json();
+  $("#w_url").value = c.base_url || ""; $("#w_instance").value = c.instance || "";
+  $("#w_apikey").placeholder = c.apikey__set ? "•••••• (preenchida — deixe em branco para manter)" : "";
+  $("#w_tick").innerHTML = c.apikey__set ? `<span style="color:var(--ok)">✓ preenchida</span>` : "";
+  $("#w_status").textContent = c.configurado ? "Configurado — use os botões acima para conectar." : "Preencha e salve os campos acima para começar.";
+}
+async function salvarWpp(){
+  const body = {base_url: $("#w_url").value.trim(), instance: $("#w_instance").value.trim(), apikey: $("#w_apikey").value.trim()};
+  await fetch("/api/whatsapp",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  $("#w_apikey").value = "";
+  toast("Configuração do WhatsApp salva!");
+  await carregarWpp();
+}
+async function acaoWpp(nome){
+  $("#w_status").textContent = "Processando…";
+  const r = await (await fetch("/api/whatsapp-acao",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({nome})})).json();
+  if(r.erro){ $("#w_status").textContent = "Erro: " + r.erro; toast(r.erro, true); return; }
+  if(nome==="criar-instancia") $("#w_status").textContent = "Instância criada. Clique em “Conectar (QR code)”.";
+  else if(nome==="status") $("#w_status").textContent = "Status da conexão: " + (r.estado || "desconhecido");
+  else if(nome==="desconectar"){ $("#w_status").textContent = "Desconectado."; $("#w_qrbox").innerHTML = ""; }
+}
+async function conectarWpp(){
+  $("#w_status").textContent = "Gerando QR code…";
+  const r = await (await fetch("/api/whatsapp-acao",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({nome:"conectar"})})).json();
+  if(r.erro){ $("#w_status").textContent = "Erro: " + r.erro; toast(r.erro, true); return; }
+  if(!r.qr){ $("#w_status").textContent = "Não veio QR code — a instância já deve estar conectada."; return; }
+  const src = r.qr.startsWith("data:") ? r.qr : "data:image/png;base64," + r.qr;
+  $("#w_qrbox").innerHTML = `<img class="qr" src="${src}">`;
+  $("#w_status").textContent = "Escaneie o QR code no WhatsApp do celular: Aparelhos conectados → Conectar um aparelho.";
+}
+async function testarWpp(){
+  const grupo = $("#w_testegrupo").value.trim();
+  if(!grupo){ toast("Informe o JID do grupo para testar.", true); return; }
+  const r = await (await fetch("/api/whatsapp-acao",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({nome:"testar", grupo})})).json();
+  if(r.erro){ toast(r.erro, true); return; }
+  toast("Mensagem de teste enviada — confira o grupo.");
+}
+
 let toastT;
 function toast(msg,err){ const t=$("#toast"); t.textContent=msg; t.className="toast show"+(err?" err":"");
   clearTimeout(toastT); toastT=setTimeout(()=>t.className="toast"+(err?" err":""),3200); }
 
-carregarCfg(); carregarCanais(); atualizar(); puxarLogs();
+carregarCfg(); carregarCanais(); carregarWpp(); atualizar(); puxarLogs();
 setInterval(atualizar, 2500);
 setInterval(puxarLogs, 1500);
 </script>

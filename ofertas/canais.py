@@ -31,6 +31,8 @@ class Canal:
     cupom: str = ""          # código de cupom fixo deste canal: entra nos posts do ML que não trazem cupom próprio
     amazon_tag: str = ""     # tag de associado só deste canal (vazio = a do .env): mede o nicho na Amazon
     aceitar_loja_comum: bool = False  # True = este canal aceita vendedor comum (ignora exigir_loja_oficial; perfumes nunca)
+    aceitar_lider: bool = False  # True = aceita também MercadoLíder Platinum / Loja Indicada bem avaliada (não só loja oficial)
+    whatsapp_grupo: str = ""  # JID do grupo/canal do WhatsApp (ex.: "120363...@g.us"); vazio = não posta lá
 
     @property
     def rotulo(self) -> str:
@@ -67,6 +69,8 @@ def _de_dict(d: dict) -> Canal:
         amazon_tag=str(d.get("amazon_tag") or "").strip(),
         cupom=str(d.get("cupom") or "").strip().upper(),
         aceitar_loja_comum=bool(d.get("aceitar_loja_comum", False)),
+        aceitar_lider=bool(d.get("aceitar_lider", False)),
+        whatsapp_grupo=str(d.get("whatsapp_grupo") or "").strip(),
     )
 
 
@@ -117,3 +121,8 @@ def ler() -> list[Canal]:
 
 def ativos() -> list[Canal]:
     return [c for c in ler() if c.ativo and c.chat_id]
+
+
+def algum_aceita_lider() -> bool:
+    """Algum canal ativo aceita MercadoLíder/Loja Indicada? Evita consultar reputação de vendedor à toa."""
+    return any(c.aceitar_lider for c in ativos())

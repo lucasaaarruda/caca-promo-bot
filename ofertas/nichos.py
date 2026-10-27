@@ -539,12 +539,20 @@ NICHOS: dict[str, dict] = {
     },
     "arcondicionado": {
         "emoji": "❄️", "nome": "Ar Condicionado",
-        "ml_buscas": ["ar condicionado split 12000 btu", "ar condicionado inverter", "suporte ar condicionado"],
+        # catálogo pequeno (poucos termos = fica refém do rodízio genérico de categoria, que traz muita coisa fora do nicho):
+        # cobre as potências e marcas mais comuns para achar oferta direto, sem depender só da categoria
+        "ml_buscas": ["ar condicionado split 9000 btu", "ar condicionado split 12000 btu", "ar condicionado split 18000 btu",
+                      "ar condicionado split 24000 btu", "ar condicionado inverter", "ar condicionado quente frio",
+                      "ar condicionado lg", "ar condicionado samsung", "ar condicionado springer", "ar condicionado midea",
+                      "ar condicionado electrolux", "ar condicionado philco", "ar condicionado consul", "ar condicionado elgin",
+                      "climatizador de ar", "suporte ar condicionado"],
         "ml": {"MLB1646": "Ares Condicionados"},
         "ml_confiavel": True,
         "amazon_dep": {"appliances": "Eletrodomésticos"},
-        "amazon_buscas": ["ar condicionado split", "ar condicionado inverter", "ar condicionado portátil"],
-        "shopee": ["ar condicionado", "ar condicionado split", "ar condicionado portátil"],
+        "amazon_buscas": ["ar condicionado split", "ar condicionado inverter", "ar condicionado portátil",
+                          "ar condicionado 9000 btu", "ar condicionado 12000 btu", "ar condicionado 18000 btu",
+                          "climatizador de ar"],
+        "shopee": ["ar condicionado", "ar condicionado split", "ar condicionado portátil", "climatizador de ar"],
         "termos": ["ar condicionado", "ar-condicionado", "split", "btu", "btus", "evaporadora", "condensadora",
                    "climatizador", "suporte para ar condicionado", "limpa ar condicionado"],
         "excluir": ["automotivo", "automotiva", "veicular", "veiculo", "carro", "carros", "caminhao", "onibus", "trator",

@@ -22,7 +22,7 @@ from urllib.parse import urlparse
 
 import requests
 
-from . import autostart, canais, instancia
+from . import autostart, canais, instancia, whatsapp
 from .config import BASE_DIR, DATA_DIR
 from .painel_html import PAGINA
 
@@ -330,6 +330,10 @@ class Handler(BaseHTTPRequestHandler):
         elif rota == "/api/nichos":
             from .nichos import catalogo, ler_selecao
             self._json({"catalogo": catalogo(), "selecionados": ler_selecao()})
+        elif rota == "/api/whatsapp":
+            c = whatsapp.ler()
+            self._json({"base_url": c["base_url"], "instance": c["instance"],
+                        "apikey__set": bool(c["apikey"]), "configurado": whatsapp.configurado()})
         else:
             self._json({"erro": "rota desconhecida"}, 404)
 
@@ -408,6 +412,36 @@ class Handler(BaseHTTPRequestHandler):
             from .nichos import salvar_selecao
             salvar_selecao(dados.get("selecionados") or [])
             self._json({"ok": True})
+        elif rota == "/api/whatsapp":
+            whatsapp.salvar(dados)
+            self._json({"ok": True})
+        elif rota == "/api/whatsapp-acao":
+            nome = dados.get("nome", "")
+            try:
+                if nome == "criar-instancia":
+                    whatsapp.criar_instancia()
+                    self._json({"ok": True})
+                elif nome == "conectar":
+                    self._json({"ok": True, **whatsapp.conectar()})
+                elif nome == "status":
+                    self._json({"ok": True, "estado": whatsapp.status_conexao()})
+                elif nome == "desconectar":
+                    whatsapp.desconectar()
+                    self._json({"ok": True})
+                elif nome == "testar":
+                    grupo = str(dados.get("grupo", "")).strip()
+                    if not grupo:
+                        return self._json({"erro": "Informe o ID do grupo (JID) para testar."}, 400)
+                    from .models import Oferta
+                    teste = Oferta(plataforma="mercadolivre", id_produto="teste",
+                                   titulo="Oferta de teste do painel", url_afiliado="https://exemplo.com",
+                                   preco=99.9)
+                    whatsapp.postar_oferta(teste, grupo)
+                    self._json({"ok": True})
+                else:
+                    self._json({"erro": "ação desconhecida"}, 400)
+            except RuntimeError as e:
+                self._json({"erro": str(e)}, 400)
         else:
             self._json({"erro": "rota desconhecida"}, 404)
 
