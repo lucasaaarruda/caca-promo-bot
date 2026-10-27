@@ -1,6 +1,8 @@
 # Bot de Ofertas para Telegram 🔥
 
-Bot que roda **no seu PC** (Windows), garimpa promoções em **Mercado Livre, Shopee e Amazon** e posta no seu canal do Telegram com **os seus links de afiliado** — foto, preço "de/por", desconto e botão de compra. Tudo local, sem servidor nem mensalidade.
+Bot que roda **no seu PC** (Windows), garimpa promoções em **Mercado Livre, Shopee e Amazon** e posta no seu canal do Telegram (e, opcionalmente, no WhatsApp) com **os seus links de afiliado** — foto, preço "de/por", desconto e botão de compra. Tudo local, sem servidor nem mensalidade.
+
+> Este projeto começou a partir de uma base de código existente e foi bastante reescrito e expandido desde então: canais multi-nicho com filtros e etiquetas próprias, painel de controle completo, relatórios diários, nível de confiança de vendedor configurável por canal, integração com WhatsApp e várias correções de estabilidade.
 
 > ⚠️ Você precisa das **suas próprias** contas de afiliado (Mercado Livre, Amazon Associados, Shopee Afiliados). As comissões vão para quem configurar — cada pessoa usa as suas.
 
@@ -150,5 +152,9 @@ ofertas/
 ├── relatorio.py       # relatório diário no seu privado
 ├── servico.py         # supervisor: reinicia o bot se cair
 ├── autostart.py       # iniciar junto com o Windows
+├── whatsapp.py        # integração opcional com WhatsApp via Evolution API
 └── sources/           # mercadolivre.py, shopee.py, amazon.py
 ```
+
+## WhatsApp (opcional)
+Além do Telegram, o bot pode postar as mesmas ofertas em grupos do WhatsApp via [Evolution API](https://github.com/EvolutionAPI/evolution-api) (gateway não oficial, self-hosted). Tudo configurável pelo card **📱 WhatsApp** do painel: URL da instância, chave e QR code de pareamento. **Use sempre um número dedicado**, nunca o seu pessoal — é uma automação não oficial e o WhatsApp pode banir o número.
