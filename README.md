@@ -105,6 +105,15 @@ O site do ML pede captcha para buscas e páginas de produto, e a página de "ofe
 
 O ML libera para apps novos `/products/search`, `/highlights` e `/products/{id}/items`; nega `/sites/MLB/search` e `/items/{id}` (HTTP 403). Produtos sem vendedor ativo são ignorados. A opção **"Aceitar produtos sem desconto"** do canal deixa passar também os mais vendidos sem desconto listado.
 
+### Confiança do vendedor
+Por padrão, todo canal só posta de vendedor verificado (loja oficial no Mercado Livre/Shopee, "vendido pela Amazon"). Em `config.yaml`, `lojas_confiaveis: oficial+lider` libera isso globalmente também para MercadoLíder Platinum e Loja Indicada bem avaliada; o mesmo dá para ligar **por canal**, marcando "Aceitar também MercadoLíder..." no formulário do canal no painel — útil pra ganhar volume em nichos com baixo risco de falsificação (ex.: ferramentas), mantendo a regra rígida só onde importa (ex.: perfumes).
+
+## Testes
+```powershell
+uv run python -m unittest discover -s tests
+```
+Os testes nunca tocam nos dados reais (apontam para uma pasta temporária) e cobrem filtros, formatação, canais, fontes e o painel.
+
 ## Deixar rodando sozinho
 No painel, cartão **🚀 Execução automática** → **Iniciar junto com o Windows**. Isso cria uma tarefa do
 Agendador do Windows (do seu usuário, sem precisar de administrador) que liga o bot **sem janela** quando você
@@ -142,18 +151,21 @@ Os sites mudam de layout de vez em quando. Refaça o `ml-login` (a sessão pode 
 ```
 ofertas/
 ├── main.py            # comandos (check, run, converter, postar, ml-login, testar)
+├── painel.py          # servidor do painel de controle web (gráfico, sem terminal)
+├── painel_html.py      # front-end do painel (HTML/CSS/JS, uma página só)
 ├── bot_interativo.py  # bot do Telegram (conversor + agendador)
 ├── pipeline.py        # coleta → filtros → gera links → posta
 ├── formatter.py       # visual do post
+├── models.py          # modelo de dados da Oferta
 ├── db.py              # banco anti-repetição
 ├── config.py          # lê .env + config.yaml
-├── canais.py          # canais do Telegram (nicho, filtros, etiqueta própria)
+├── canais.py          # canais (Telegram/WhatsApp), nicho, filtros, etiqueta própria
 ├── nichos.py          # catálogo de nichos e regras de relevância
-├── relatorio.py       # relatório diário no seu privado
+├── relatorio.py / relatorio_completo.py  # relatório diário e relatório completo em PDF
 ├── servico.py         # supervisor: reinicia o bot se cair
 ├── autostart.py       # iniciar junto com o Windows
 ├── whatsapp.py        # integração opcional com WhatsApp via Evolution API
-└── sources/           # mercadolivre.py, shopee.py, amazon.py
+└── sources/           # mercadolivre.py, mercadolivre_api.py, shopee.py, amazon.py
 ```
 
 ## WhatsApp (opcional)
